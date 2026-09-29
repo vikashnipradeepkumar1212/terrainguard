@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TerrainGuard Audit Dashboard</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+:root{--bg:#f5f6f8;--card:#fff;--tx:#1d2330;--mu:#667085;--ln:#dde1e8;--hi:#b45309;--c0:#2563eb;--c1:#0d9488;--c2:#7c3aed;--c3:#db2777;--c4:#65a30d}
+@media(prefers-color-scheme:dark){:root{--bg:#12151b;--card:#1b2029;--tx:#e6e9ef;--mu:#98a1b3;--ln:#2c3340;--hi:#f59e0b}}
+*{box-sizing:border-box}body{margin:0;font:14px/1.4 system-ui,sans-serif;background:var(--bg);color:var(--tx)}
+header{padding:10px 16px;border-bottom:1px solid var(--ln);background:var(--card);display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+h1{font-size:16px;margin:0}.badge{padding:2px 8px;border-radius:99px;border:1px solid var(--hi);color:var(--hi);font-size:12px;font-weight:600}
+.note{color:var(--mu);font-size:12px;flex:1;min-width:220px}
+main{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:12px;padding:12px}
+@media(max-width:900px){main{grid-template-columns:1fr}}
+section{background:var(--card);border:1px solid var(--ln);border-radius:8px;padding:10px;min-width:0}
+h2{font-size:13px;margin:0 0 8px;color:var(--mu);text-transform:uppercase;letter-spacing:.04em}
+#map{height:380px;border-radius:6px}.wide{grid-column:1/-1}
+.cl{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+.cc{border:1px solid var(--ln);border-left:5px solid var(--k);border-radius:6px;padding:8px;cursor:pointer}
+.cc.on{outline:2px solid var(--k)}.cc b{font-size:15px}.cc div{color:var(--mu);font-size:12px}
+.cc .an{color:var(--hi);font-weight:600}
+.tw{max-height:330px;overflow:auto}table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{padding:5px 7px;text-align:right;border-bottom:1px solid var(--ln);white-space:nowrap}th:first-child,td:first-child{text-align:left}
+th{position:sticky;top:0;background:var(--card);cursor:pointer;user-select:none}th.s::after{content:attr(data-d)}
+tr.r{cursor:pointer}tr.r:hover{background:var(--bg)}tr.sel{outline:2px solid var(--tx);outline-offset:-2px}
+tr.a td:first-child{border-left:4px solid var(--hi)}.tag{color:var(--hi);font-weight:600}
+.tools{display:flex;gap:10px;margin-bottom:8px;align-items:center;flex-wrap:wrap;font-size:13px}select{font:inherit}
+dl{display:grid;grid-template-columns:auto 1fr;gap:2px 10px;margin:0 0 8px;font-size:13px}dt{color:var(--mu)}dd{margin:0}
+svg text{fill:var(--mu);font-size:10px}.empty{color:var(--mu);padding:12px 0}
+</style></head><body>
+<header><h1>TerrainGuard Audit Dashboard</h1><span class="badge" id="mode">…</span>
+<span class="note">Retrospective audit view. Clearance data and cluster labels — not predictions.</span></header>
+<main>
+<section><h2>Map</h2><div id="map"></div></section>
+<section><h2>Flight detail — clearance profile</h2><div id="detail"><div class="empty">Select a flight (table or map).</div></div></section>
+<section class="wide"><h2>Clusters</h2><div class="cl" id="clusters"></div></section>
+<section class="wide"><h2>Flights</h2>
+<div class="tools"><label>Cluster <select id="fc"><option value="">All</option></select></label>
+<label><input type="checkbox" id="fa"> Anomalies only</label><span id="cnt" class="note"></span></div>
+<div class="tw"><table><thead id="th"></thead><tbody id="tb"></tbody></table></div></section>
+</main>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+/* ===== DATA ADAPTER — the ONLY place that knows mock vs API. Flip SOURCE to 'api'. ===== */
+const SOURCE = new URLSearchParams(location.search).get('source') || 'mock';   // 'mock' | 'api'
+const API = 'http://localhost:8000';
+let _mock;
+const getMock = async () => _mock ||= await (await fetch('mock/mock_data.json')).json();
+const j = async p => { const r = await fetch(API + p); if (!r.ok) throw new Error(p + ' → ' + r.status); return r.json(); };
+const Data = {
+  async load() {
+    if (SOURCE === 'mock') { const m = await getMock(); return {mode: 'mock', flights: m.flights, clusters: m.clusters}; }
+    const [flights, clusters, h] = await Promise.all([j('/flights?limit=1000'), j('/clusters'), j('/health')]);
+    return {mode: h.data_mode, flights, clusters};
+  },
+  // /flights/{id}/profile is a PROPOSED endpoint (not in current API_SPEC). Returns [] if unavailable.
+  async profile(f) {
+    if (SOURCE === 'mock') return f.profile || [];
+    try { const r = await j('/flights/' + encodeURIComponent(f.flight_id) + '/profile'); return r.points || r; } catch (e) { return []; }
+  }
+};
+/* ===== STATE / HELPERS ===== */
+const COL = ['--c0','--c1','--c2','--c3','--c4'], col = c => `var(${COL[(c ?? 0) % 5]})`;
+const hex = c => getComputedStyle(document.documentElement).getPropertyValue(COL[(c ?? 0) % 5]).trim();
+const $ = id => document.getElementById(id), f1 = v => v == null ? '–' : (+v).toFixed(1);
+let S = {flights: [], clusters: [], sort: {k: 'flight_id', d: 1}, cl: '', an: false, sel: null};
+const COLS = [['flight_id','Flight'],['cluster','Cluster'],['mean_clearance','Mean clr (ft)'],['std_clearance','Std (ft)'],
+  ['min_clearance','Min clr (ft)'],['start_altitude','Start alt (ft)'],['anomaly_score','Anomaly score'],['is_anomaly','Anomaly']];
+const hasGeo = f => f.start_lat != null && f.start_lon != null;
+const view = () => S.flights.filter(f => (S.cl === '' || String(f.cluster) === S.cl) && (!S.an || f.is_anomaly))
+  .sort((a, b) => { const {k, d} = S.sort, x = a[k], y = b[k];
+    return x == null ? 1 : y == null ? -1 : (x > y ? 1 : x < y ? -1 : 0) * d; });
+/* ===== MAP (Leaflet) — markers only for flights that have coordinates ===== */
+const map = L.map('map').setView([37, -117], 7), layer = L.layerGroup().addTo(map), track = L.layerGroup().addTo(map);
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom: 18, attribution: '© OpenStreetMap'}).addTo(map);
+let markers = {};
+function drawMap(fit) {
+  layer.clearLayers(); markers = {}; const pts = [];
+  view().filter(hasGeo).forEach(f => {
+    const m = L.circleMarker([f.start_lat, f.start_lon], {radius: f.is_anomaly ? 9 : 6, color: f.is_anomaly ? getComputedStyle(document.documentElement).getPropertyValue('--hi').trim() : '#fff',
+      weight: f.is_anomaly ? 3 : 1, fillColor: hex(f.cluster), fillOpacity: .9}).addTo(layer);
+    m.bindTooltip(`${f.flight_id} · cluster ${f.cluster}${f.is_anomaly ? ' · anomaly' : ''}`);
+    m.on('click', () => select(f.flight_id)); markers[f.flight_id] = m; pts.push([f.start_lat, f.start_lon]);
+  });
+  if (fit && pts.length) map.fitBounds(pts, {padding: [20, 20]});
+}
+/* ===== TABLE ===== */
+function drawTable() {
+  $('th').innerHTML = '<tr>' + COLS.map(([k, l]) => `<th data-k="${k}" class="${S.sort.k === k ? 's' : ''}" data-d="${S.sort.d > 0 ? ' ▲' : ' ▼'}">${l}</th>`).join('') + '</tr>';
+  $('th').querySelectorAll('th').forEach(t => t.onclick = () => { const k = t.dataset.k;
+    S.sort = {k, d: S.sort.k === k ? -S.sort.d : 1}; refresh(); });
+  const v = view(); $('cnt').textContent = `${v.length} of ${S.flights.length} flights`;
+  $('tb').innerHTML = v.map(f => `<tr class="r ${f.is_anomaly ? 'a' : ''} ${S.sel === f.flight_id ? 'sel' : ''}" data-id="${f.flight_id}">
+    <td>${f.flight_id}</td><td style="color:${col(f.cluster)}">● ${f.cluster ?? '–'}</td><td>${f1(f.mean_clearance)}</td><td>${f1(f.std_clearance)}</td>
+    <td>${f1(f.min_clearance)}</td><td>${f1(f.start_altitude)}</td><td>${f1(f.anomaly_score)}</td><td>${f.is_anomaly ? '<span class="tag">anomaly</span>' : ''}</td></tr>`).join('');
+  $('tb').querySelectorAll('tr').forEach(r => r.onclick = () => select(r.dataset.id));
+}
+/* ===== CLUSTER PANEL ===== */
+function drawClusters() {
+  $('clusters').innerHTML = S.clusters.map(c => `<div class="cc ${String(c.cluster) === S.cl ? 'on' : ''}" style="--k:${col(c.cluster)}" data-c="${c.cluster}">
+    <b>Cluster ${c.cluster ?? 'unassigned'}</b><div>${c.flight_count} flights</div><div>mean anomaly score ${f1(c.mean_anomaly_score)}</div>
+    <div class="an">${c.anomaly_count} anomal${c.anomaly_count === 1 ? 'y' : 'ies'}</div></div>`).join('');
+  $('clusters').querySelectorAll('.cc').forEach(e => e.onclick = () => { S.cl = S.cl === e.dataset.c ? '' : e.dataset.c; $('fc').value = S.cl; refresh(true); });
+}
+/* ===== DETAIL VIEW: dependency-free SVG chart ===== */
+async function select(id) {
+  S.sel = id; const f = S.flights.find(x => x.flight_id === id); drawTable(); track.clearLayers();
+  $('detail').innerHTML = '<div class="empty">Loading profile…</div>';
+  const p = await Data.profile(f); if (S.sel !== id) return;
+  $('detail').innerHTML = `<dl><dt>Flight</dt><dd>${f.flight_id}</dd><dt>Cluster</dt><dd style="color:${col(f.cluster)}">● ${f.cluster ?? '–'}</dd>
+    <dt>Anomaly</dt><dd>${f.is_anomaly ? '<span class="tag">flagged</span>' : 'not flagged'} (score ${f1(f.anomaly_score)})</dd>
+    <dt>Mean / Min / Std</dt><dd>${f1(f.mean_clearance)} / ${f1(f.min_clearance)} / ${f1(f.std_clearance)} ft</dd></dl>` + chart(f, p);
+  if (p.length && p[0].lat != null) { const ll = p.map(q => [q.lat, q.lon]);
+    L.polyline(ll, {color: hex(f.cluster), weight: 3}).addTo(track); map.fitBounds(ll, {padding: [40, 40]}); }
+  else if (markers[id]) map.panTo(markers[id].getLatLng());
+}
+function chart(f, p) {
+  if (!p.length) return '<div class="empty">No per-observation profile provided by the data source for this flight.</div>';
+  const W = 460, H = 220, m = {l: 44, r: 8, t: 8, b: 22}, y = p.map(q => q.clearance_corrected_ft);
+  const hi = Math.max(...y, f.mean_clearance || 0), lo = Math.min(0, ...y), X = i => m.l + i / (p.length - 1 || 1) * (W - m.l - m.r),
+    Y = v => H - m.b - (v - lo) / (hi - lo || 1) * (H - m.t - m.b);
+  const ref = (v, t) => v == null ? '' : `<line x1="${m.l}" x2="${W - m.r}" y1="${Y(v)}" y2="${Y(v)}" stroke="currentColor" stroke-dasharray="4 3" opacity=".6"/><text x="${W - m.r}" y="${Y(v) - 3}" text-anchor="end">${t} ${f1(v)}</text>`;
+  const ticks = [lo, (lo + hi) / 2, hi].map(v => `<text x="${m.l - 4}" y="${Y(v) + 3}" text-anchor="end">${v.toFixed(0)}</text>`).join('');
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Clearance profile for ${f.flight_id}" style="color:var(--mu)">${ticks}
+    ${ref(f.mean_clearance, 'mean')}${ref(f.min_clearance, 'min')}<polyline fill="none" stroke="${hex(f.cluster)}" stroke-width="2" points="${p.map((q, i) => X(i) + ',' + Y(q.clearance_corrected_ft)).join(' ')}"/>
+    <text x="${m.l}" y="${H - 6}">observation # (1–${p.length})</text><text x="4" y="10">ft</text></svg>`;
+}
+/* ===== WIRING ===== */
+function refresh(fit) { drawClusters(); drawTable(); drawMap(fit); }
+$('fc').onchange = e => { S.cl = e.target.value; refresh(true); };
+$('fa').onchange = e => { S.an = e.target.checked; refresh(true); };
+Data.load().then(d => {
+  S.flights = d.flights; S.clusters = d.clusters; $('mode').textContent = d.mode === 'mock' ? 'MOCK DATA' : 'DATA MODE: ' + d.mode.toUpperCase();
+  $('fc').innerHTML += S.clusters.map(c => `<option>${c.cluster}</option>`).join(''); refresh(true);
+  if (!S.flights.some(hasGeo)) $('map').insertAdjacentHTML('afterend', '<div class="empty">No coordinates in this data source — no markers to draw.</div>');
+}).catch(e => { $('mode').textContent = 'LOAD FAILED'; $('detail').innerHTML = `<div class="empty">${e.message}. Mock mode needs a local web server (see README).</div>`; });
+</script></body></html>
