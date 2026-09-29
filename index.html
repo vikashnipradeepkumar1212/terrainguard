@@ -1,0 +1,7921 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TerrainGuard Audit Dashboard</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+:root{--bg:#f5f6f8;--card:#fff;--tx:#1d2330;--mu:#667085;--ln:#dde1e8;--hi:#b45309;--c0:#2563eb;--c1:#0d9488;--c2:#7c3aed;--c3:#db2777;--c4:#65a30d}
+@media(prefers-color-scheme:dark){:root{--bg:#12151b;--card:#1b2029;--tx:#e6e9ef;--mu:#98a1b3;--ln:#2c3340;--hi:#f59e0b}}
+*{box-sizing:border-box}body{margin:0;font:14px/1.4 system-ui,sans-serif;background:var(--bg);color:var(--tx)}
+header{padding:10px 16px;border-bottom:1px solid var(--ln);background:var(--card);display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+h1{font-size:16px;margin:0}.badge{padding:2px 8px;border-radius:99px;border:1px solid var(--hi);color:var(--hi);font-size:12px;font-weight:600}
+.note{color:var(--mu);font-size:12px;flex:1;min-width:220px}
+main{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:12px;padding:12px}
+@media(max-width:900px){main{grid-template-columns:1fr}}
+section{background:var(--card);border:1px solid var(--ln);border-radius:8px;padding:10px;min-width:0}
+h2{font-size:13px;margin:0 0 8px;color:var(--mu);text-transform:uppercase;letter-spacing:.04em}
+#map{height:380px;border-radius:6px}.wide{grid-column:1/-1}
+.cl{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+.cc{border:1px solid var(--ln);border-left:5px solid var(--k);border-radius:6px;padding:8px;cursor:pointer}
+.cc.on{outline:2px solid var(--k)}.cc b{font-size:15px}.cc div{color:var(--mu);font-size:12px}
+.cc .an{color:var(--hi);font-weight:600}
+.tw{max-height:330px;overflow:auto}table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{padding:5px 7px;text-align:right;border-bottom:1px solid var(--ln);white-space:nowrap}th:first-child,td:first-child{text-align:left}
+th{position:sticky;top:0;background:var(--card);cursor:pointer;user-select:none}th.s::after{content:attr(data-d)}
+tr.r{cursor:pointer}tr.r:hover{background:var(--bg)}tr.sel{outline:2px solid var(--tx);outline-offset:-2px}
+tr.a td:first-child{border-left:4px solid var(--hi)}.tag{color:var(--hi);font-weight:600}
+.tools{display:flex;gap:10px;margin-bottom:8px;align-items:center;flex-wrap:wrap;font-size:13px}select{font:inherit}
+dl{display:grid;grid-template-columns:auto 1fr;gap:2px 10px;margin:0 0 8px;font-size:13px}dt{color:var(--mu)}dd{margin:0}
+svg text{fill:var(--mu);font-size:10px}.empty{color:var(--mu);padding:12px 0}
+</style></head><body>
+<header><h1>TerrainGuard Audit Dashboard</h1><span class="badge" id="mode">…</span>
+<span class="note">Retrospective audit view. Clearance data and cluster labels — not predictions.</span></header>
+<main>
+<section><h2>Map</h2><div id="map"></div></section>
+<section><h2>Flight detail — clearance profile</h2><div id="detail"><div class="empty">Select a flight (table or map).</div></div></section>
+<section class="wide"><h2>Clusters</h2><div class="cl" id="clusters"></div></section>
+<section class="wide"><h2>Flights</h2>
+<div class="tools"><label>Cluster <select id="fc"><option value="">All</option></select></label>
+<label><input type="checkbox" id="fa"> Anomalies only</label><span id="cnt" class="note"></span></div>
+<div class="tw"><table><thead id="th"></thead><tbody id="tb"></tbody></table></div></section>
+</main>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+/* ===== DATA ADAPTER — the ONLY place that knows mock vs API. Flip SOURCE to 'api'. ===== */
+const SOURCE = new URLSearchParams(location.search).get('source') || 'mock';   // 'mock' | 'api'
+const API = 'http://localhost:8000';
+const _EMBEDDED_MOCK = {
+ "data_mode": "mock",
+ "flights": [
+  {
+   "flight_id": "MOCK-0020",
+   "mean_clearance": 447.0,
+   "std_clearance": 44.7,
+   "min_clearance": 389.6,
+   "start_altitude": 4656.9,
+   "cluster": 2.0,
+   "anomaly_score": 36.11334317887987,
+   "is_anomaly": false,
+   "start_lat": 36.3009,
+   "start_lon": -117.4457,
+   "profile": [
+    {
+     "seq": 0,
+     "lat": 36.3009,
+     "lon": -117.4457,
+     "clearance_corrected_ft": 471.1
+    },
+    {
+     "seq": 1,
+     "lat": 36.3113,
+     "lon": -117.4455,
+     "clearance_corrected_ft": 448.9
+    },
+    {
+     "seq": 2,
+     "lat": 36.3216,
+     "lon": -117.4452,
+     "clearance_corrected_ft": 443.5
+    },
+    {
+     "seq": 3,
+     "lat": 36.3319,
+     "lon": -117.445,
+     "clearance_corrected_ft": 479.7
+    },
+    {
+     "seq": 4,
+     "lat": 36.3423,
+     "lon": -117.4447,
+     "clearance_corrected_ft": 488.6
+    },
+    {
+     "seq": 5,
+     "lat": 36.3526,
+     "lon": -117.4445,
+     "clearance_corrected_ft": 484.9
+    },
+    {
+     "seq": 6,
+     "lat": 36.363,
+     "lon": -117.4442,
+     "clearance_corrected_ft": 518.0
+    },
+    {
+     "seq": 7,
+     "lat": 36.3733,
+     "lon": -117.444,
+     "clearance_corrected_ft": 524.6
+    },
+    {
+     "seq": 8,
+     "lat": 36.3836,
+     "lon": -117.4438,
+     "clearance_corrected_ft": 497.0
+    },
+    {
+     "seq": 9,
+     "lat": 36.394,
+     "lon": -117.4435,
+     "clearance_corrected_ft": 487.2
+    },
+    {
+     "seq": 10,
+     "lat": 36.4043,
+     "lon": -117.4433,
+     "clearance_corrected_ft": 500.4
+    },
+    {
+     "seq": 11,
+     "lat": 36.4147,
+     "lon": -117.443,
+     "clearance_corrected_ft": 505.0
+    },
+    {
+     "seq": 12,
+     "lat": 36.425,
+     "lon": -117.4428,
+     "clearance_corrected_ft": 467.0
+    },
+    {
+     "seq": 13,
+     "lat": 36.4354,
+     "lon": -117.4425,
+     "clearance_corrected_ft": 454.4
+    },
+    {
+     "seq": 14,
+     "lat": 36.4457,
+     "lon": -117.4423,
+     "clearance_corrected_ft": 432.7
+    },
+    {
+     "seq": 15,
+     "lat": 36.456,
+     "lon": -117.4421,
+     "clearance_corrected_ft": 404.5
+    },
+    {
+     "seq": 16,
+     "lat": 36.4664,
+     "lon": -117.4418,
+     "clearance_corrected_ft": 347.7
+    },
+    {
+     "seq": 17,
+     "lat": 36.4767,
+     "lon": -117.4416,
+     "clearance_corrected_ft": 372.5
+    },
+    {
+     "seq": 18,
+     "lat": 36.4871,
+     "lon": -117.4413,
+     "clearance_corrected_ft": 354.4
+    },
+    {
+     "seq": 19,
+     "lat": 36.4974,
+     "lon": -117.4411,
+     "clearance_corrected_ft": 403.0
+    },
+    {
+     "seq": 20,
+     "lat": 36.5077,
+     "lon": -117.4408,
+     "clearance_corrected_ft": 435.4
+    },
+    {
+     "seq": 21,
+     "lat": 36.5181,
+     "lon": -117.4406,
+     "clearance_corrected_ft": 472.4
+    },
+    {
+     "seq": 22,
+     "lat": 36.5284,
+     "lon": -117.4404,
+     "clearance_corrected_ft": 421.3
+    },
+    {
+     "seq": 23,
+     "lat": 36.5388,
+     "lon": -117.4401,
+     "clearance_corrected_ft": 437.7
+    },
+    {
+     "seq": 24,
+     "lat": 36.5491,
+     "lon": -117.4399,
+     "clearance_corrected_ft": 430.5
+    },
+    {
+     "seq": 25,
+     "lat": 36.5595,
+     "lon": -117.4396,
+     "clearance_corrected_ft": 429.5
+    },
+    {
+     "seq": 26,
+     "lat": 36.5698,
+     "lon": -117.4394,
+     "clearance_corrected_ft": 399.5
+    },
+    {
+     "seq": 27,
+     "lat": 36.5801,
+     "lon": -117.4391,
+     "clearance_corrected_ft": 445.1
+    },
+    {
+     "seq": 28,
+     "lat": 36.5905,
+     "lon": -117.4389,
+     "clearance_corrected_ft": 435.3
+    },
+    {
+     "seq": 29,
+     "lat": 36.6008,
+     "lon": -117.4387,
+     "clearance_corrected_ft": 418.2
+    }
+   ]
+  },
+  {
+   "flight_id": "MOCK-0017",
+   "mean_clearance": 472.1,
+   "std_clearance": 32.2,
+   "min_clearance": 425.2,
+   "start_altitude": 3356.8,
+   "cluster": 0.0,
+   "anomaly_score": 19.571854129040993,
+   "is_anomaly": false,
+   "start_lat": 37.3111,
+   "start_lon": -117.0067,
+   "profile": [
+    {
+     "seq": 0,
+     "lat": 37.3111,
+     "lon": -117.0067,
+     "clearance_corrected_ft": 473.5
+    },
+    {
+     "seq": 1,
+     "lat": 37.3181,
+     "lon": -116.9991,
+     "clearance_corrected_ft": 423.1
+    },
+    {
+     "seq": 2,
+     "lat": 37.3251,
+     "lon": -116.9915,
+     "clearance_corrected_ft": 438.8
+    },
+    {
+     "seq": 3,
+     "lat": 37.3321,
+     "lon": -116.9838,
+     "clearance_corrected_ft": 474.0
+    },
+    {
+     "seq": 4,
+     "lat": 37.3391,
+     "lon": -116.9762,
+     "clearance_corrected_ft": 434.4
+    },
+    {
+     "seq": 5,
+     "lat": 37.3461,
+     "lon": -116.9686,
+     "clearance_corrected_ft": 453.4
+    },
+    {
+     "seq": 6,
+     "lat": 37.3531,
+     "lon": -116.961,
+     "clearance_corrected_ft": 485.5
+    },
+    {
+     "seq": 7,
+     "lat": 37.3601,
+     "lon": -116.9534,
+     "clearance_corrected_ft": 468.3
+    },
+    {
+     "seq": 8,
+     "lat": 37.3672,
+     "lon": -116.9458,
+     "clearance_corrected_ft": 483.7
+    },
+    {
+     "seq": 9,
+     "lat": 37.3742,
+     "lon": -116.9382,
+     "clearance_corrected_ft": 538.9
+    },
+    {
+     "seq": 10,
+     "lat": 37.3812,
+     "lon": -116.9306,
+     "clearance_corrected_ft": 489.7
+    },
+    {
+     "seq": 11,
+     "lat": 37.3882,
+     "lon": -116.9229,
+     "clearance_corrected_ft": 488.6
+    },
+    {
+     "seq": 12,
+     "lat": 37.3952,
+     "lon": -116.9153,
+     "clearance_corrected_ft": 517.7
+    },
+    {
+     "seq": 13,
+     "lat": 37.4022,
+     "lon": -116.9077,
+     "clearance_corrected_ft": 465.4
+    },
+    {
+     "seq": 14,
+     "lat": 37.4092,
+     "lon": -116.9001,
+     "clearance_corrected_ft": 463.5
+    },
+    {
+     "seq": 15,
+     "lat": 37.4162,
+     "lon": -116.8925,
+     "clearance_corrected_ft": 490.6
+    },
+    {
+     "seq": 16,
+     "lat": 37.4232,
+     "lon": -116.8849,
+     "clearance_corrected_ft": 504.7
+    },
+    {
+     "seq": 17,
+     "lat": 37.4302,
+     "lon": -116.8773,
+     "clearance_corrected_ft": 525.3
+    },
+    {
+     "seq": 18,
+     "lat": 37.4372,
+     "lon": -116.8697,
+     "clearance_corrected_ft": 513.7
+    },
+    {
+     "seq": 19,
+     "lat": 37.4442,
+     "lon": -116.862,
+     "clearance_corrected_ft": 502.2
+    },
+    {
+     "seq": 20,
+     "lat": 37.4512,
+     "lon": -116.8544,
+     "clearance_corrected_ft": 492.7
+    },
+    {
+     "seq": 21,
+     "lat": 37.4582,
+     "lon": -116.8468,
+     "clearance_corrected_ft": 479.8
+    },
+    {
+     "seq": 22,
+     "lat": 37.4652,
+     "lon": -116.8392,
+     "clearance_corrected_ft": 417.1
+    },
+    {
+     "seq": 23,
+     "lat": 37.4722,
+     "lon": -116.8316,
+     "clearance_corrected_ft": 419.4
+    },
+    {
+     "seq": 24,
+     "lat": 37.4792,
+     "lon": -116.824,
+     "clearance_corrected_ft": 409.9
+    },
+    {
+     "seq": 25,
+     "lat": 37.4862,
+     "lon": -116.8164,
+     "clearance_corrected_ft": 442.4
+    },
+    {
+     "seq": 26,
+     "lat": 37.4932,
+     "lon": -116.8088,
+     "clearance_corrected_ft": 466.7
+    },
+    {
+     "seq": 27,
+     "lat": 37.5002,
+     "lon": -116.8011,
+     "clearance_corrected_ft": 463.5
+    },
+    {
+     "seq": 28,
+     "lat": 37.5072,
+     "lon": -116.7935,
+     "clearance_corrected_ft": 458.3
+    },
+    {
+     "seq": 29,
+     "lat": 37.5142,
+     "lon": -116.7859,
+     "clearance_corrected_ft": 478.5
+    }
+   ]
+  },
+  {
+   "flight_id": "MOCK-0016",
+   "mean_clearance": 398.4,
+   "std_clearance": 28.6,
+   "min_clearance": 354.6,
+   "start_altitude": 2692.2,
+   "cluster": 2.0,
+   "anomaly_score": 15.659317425169506,
+   "is_anomaly": false,
+   "start_lat": 36.7786,
+   "start_lon": -116.8521,
+   "profile": [
+    {
+     "seq": 0,
+     "lat": 36.7786,
+     "lon": -116.8521,
+     "clearance_corrected_ft": 416.0
+    },
+    {
+     "seq": 1,
+     "lat": 36.7874,
+     "lon": -116.8577,
+     "clearance_corrected_ft": 419.8
+    },
+    {
+     "seq": 2,
+     "lat": 36.7961,
+     "lon": -116.8633,
+     "clearance_corrected_ft": 404.1
+    },
+    {
+     "seq": 3,
+     "lat": 36.8048,
+     "lon": -116.8689,
+     "clearance_corrected_ft": 404.4
+    },
+    {
+     "seq": 4,
+     "lat": 36.8135,
+     "lon": -116.8745,
+     "clearance_corrected_ft": 414.5
+    },
+    {
+     "seq": 5,
+     "lat": 36.8222,
+     "lon": -116.8801,
+     "clearance_corrected_ft": 416.3
+    },
+    {
+     "seq": 6,
+     "lat": 36.8309,
+     "lon": -116.8857,
+     "clearance_corrected_ft": 392.2
+    },
+    {
+     "seq": 7,
+     "lat": 36.8396,
+     "lon": -116.8912,
+     "clearance_corrected_ft": 382.5
+    },
+    {
+     "seq": 8,
+     "lat": 36.8483,
+     "lon": -116.8968,
+     "clearance_corrected_ft": 386.6
+    },
+    {
+     "seq": 9,
+     "lat": 36.857,
+     "lon": -116.9024,
+     "clearance_corrected_ft": 375.5
+    },
+    {
+     "seq": 10,
+     "lat": 36.8657,
+     "lon": -116.908,
+     "clearance_corrected_ft": 393.5
+    },
+    {
+     "seq": 11,
+     "lat": 36.8744,
+     "lon": -116.9136,
+     "clearance_corrected_ft": 405.5
+    },
+    {
+     "seq": 12,
+     "lat": 36.8831,
+     "lon": -116.9192,
+     "clearance_corrected_ft": 420.8
+    },
+    {
+     "seq": 13,
+     "lat": 36.8918,
+     "lon": -116.9248,
+     "clearance_corrected_ft": 430.3
+    },
+    {
+     "seq": 14,
+     "lat": 36.9005,
+     "lon": -116.9304,
+     "clearance_corrected_ft": 431.8
+    },
+    {
+     "seq": 15,
+     "lat": 36.9092,
+     "lon": -116.9359,
+     "clearance_corrected_ft": 430.2
+    },
+    {
+     "seq": 16,
+     "lat": 36.9179,
+     "lon": -116.9415,
+     "clearance_corrected_ft": 420.9
+    },
+    {
+     "seq": 17,
+     "lat": 36.9266,
+     "lon": -116.9471,
+     "clearance_corrected_ft": 429.5
+    },
+    {
+     "seq": 18,
+     "lat": 36.9354,
+     "lon": -116.9527,
+     "clearance_corrected_ft": 402.0
+    },
+    {
+     "seq": 19,
+     "lat": 36.9441,
+     "lon": -116.9583,
+     "clearance_corrected_ft": 411.6
+    },
+    {
+     "seq": 20,
+     "lat": 36.9528,
+     "lon": -116.9639,
+     "clearance_corrected_ft": 373.1
+    },
+    {
+     "seq": 21,
+     "lat": 36.9615,
+     "lon": -116.9695,
+     "clearance_corrected_ft": 344.6
+    },
+    {
+     "seq": 22,
+     "lat": 36.9702,
+     "lon": -116.9751,
+     "clearance_corrected_ft": 332.1
+    },
+    {
+     "seq": 23,
+     "lat": 36.9789,
+     "lon": -116.9807,
+     "clearance_corrected_ft": 337.6
+    },
+    {
+     "seq": 24,
+     "lat": 36.9876,
+     "lon": -116.9862,
+     "clearance_corrected_ft": 335.1
+    },
+    {
+     "seq": 25,
+     "lat": 36.9963,
+     "lon": -116.9918,
+     "clearance_corrected_ft": 390.3
+    },
+    {
+     "seq": 26,
+     "lat": 37.005,
+     "lon": -116.9974,
+     "clearance_corrected_ft": 407.2
+    },
+    {
+     "seq": 27,
+     "lat": 37.0137,
+     "lon": -117.003,
+     "clearance_corrected_ft": 402.7
+    },
+    {
+     "seq": 28,
+     "lat": 37.0224,
+     "lon": -117.0086,
+     "clearance_corrected_ft": 418.2
+    },
+    {
+     "seq": 29,
+     "lat": 37.0311,
+     "lon": -117.0142,
+     "clearance_corrected_ft": 422.9
+    }
+   ]
+  },
+  {
+   "flight_id": "MOCK-0027",
+   "mean_clearance": 481.9,
+   "std_clearance": 31.5,
+   "min_clearance": 425.7,
+   "start_altitude": 2894.0,
+   "cluster": 0.0,
+   "anomaly_score": 9.930485027024492,
+   "is_anomaly": false,
+   "start_lat": 36.1031,
+   "start_lon": -117.355,
+   "profile": [
+    {
+     "seq": 0,
+     "lat": 36.1031,
+     "lon": -117.355,
+     "clearance_corrected_ft": 472.5
+    },
+    {
+     "seq": 1,
+     "lat": 36.0928,
+     "lon": -117.3563,
+     "clearance_corrected_ft": 467.9
+    },
+    {
+     "seq": 2,
+     "lat": 36.0825,
+     "lon": -117.3575,
+     "clearance_corrected_ft": 471.0
+    },
+    {
+     "seq": 3,
+     "lat": 36.0723,
+     "lon": -117.3588,
+     "clearance_corrected_ft": 489.9
+    },
+    {
+     "seq": 4,
+     "lat": 36.062,
+     "lon": -117.3601,
+     "clearance_corrected_ft": 492.7
+    },
+    {
+     "seq": 5,
+     "lat": 36.0517,
+     "lon": -117.3613,
+     "clearance_corrected_ft": 513.2
+    },
+    {
+     "seq": 6,
+     "lat": 36.0415,
+     "lon": -117.3626,
+     "clearance_corrected_ft": 498.0
+    },
+    {
+     "seq": 7,
+     "lat": 36.0312,
+     "lon": -117.3639,
+     "clearance_corrected_ft": 511.2
+    },
+    {
+     "seq": 8,
+     "lat": 36.0209,
+     "lon": -117.3651,
+     "clearance_corrected_ft": 457.9
+    },
+    {
+     "seq": 9,
+     "lat": 36.0107,
+     "lon": -117.3664,
+     "clearance_corrected_ft": 434.2
+    },
+    {
+     "seq": 10,
+     "lat": 36.0004,
+     "lon": -117.3677,
+     "clearance_corrected_ft": 439.1
+    },
+    {
+     "seq": 11,
+     "lat": 35.9901,
+     "lon": -117.3689,
+     "clearance_corrected_ft": 411.5
+    },
+    {
+     "seq": 12,
+     "lat": 35.9799,
+     "lon": -117.3702,
+     "clearance_corrected_ft": 428.8
+    },
+    {
+     "seq": 13,
+     "lat": 35.9696,
+     "lon": -117.3715,
+     "clearance_corrected_ft": 433.3
+    },
+    {
+     "seq": 14,
+     "lat": 35.9593,
+     "lon": -117.3727,
+     "clearance_corrected_ft": 467.2
+    },
+    {
+     "seq": 15,
+     "lat": 35.9491,
+     "lon": -117.374,
+     "clearance_corrected_ft": 445.5
+    },
+    {
+     "seq": 16,
+     "lat": 35.9388,
+     "lon": -117.3752,
+     "clearance_corrected_ft": 497.7
+    },
+    {
+     "seq": 17,
+     "lat": 35.9285,
+     "lon": -117.3765,
+     "clearance_corrected_ft": 484.9
+    },
+    {
+     "seq": 18,
+     "lat": 35.9183,
+     "lon": -117.3778,
+     "clearance_corrected_ft": 488.6
+    },
+    {
+     "seq": 19,
+     "lat": 35.908,
+     "lon": -117.379,
+     "clearance_corrected_ft": 497.5
+    },
+    {
+     "seq": 20,
+     "lat": 35.8977,
+     "lon": -117.3803,
+     "clearance_corrected_ft": 538.5
+    },
+    {
+     "seq": 21,
+     "lat": 35.8875,
+     "lon": -117.3816,
+     "clearance_corrected_ft": 523.3
+    },
+    {
+     "seq": 22,
+     "lat": 35.8772,
+     "lon": -117.3828,
+     "clearance_corrected_ft": 516.1
+    },
+    {
+     "seq": 23,
+     "lat": 35.8669,
+     "lon": -117.3841,
+     "clearance_corrected_ft": 540.8
+    },
+    {
+     "seq": 24,
+     "lat": 35.8567,
+     "lon": -117.3854,
+     "clearance_corrected_ft": 500.9
+    },
+    {
+     "seq": 25,
+     "lat": 35.8464,
+     "lon": -117.3866,
+     "clearance_corrected_ft": 494.7
+    },
+    {
+     "seq": 26,
+     "lat": 35.8361,
+     "lon": -117.3879,
+     "clearance_corrected_ft": 486.1
+    },
+    {
+     "seq": 27,
+     "lat": 35.8259,
+     "lon": -117.3892,
+     "clearance_corrected_ft": 490.1
+    },
+    {
+     "seq": 28,
+     "lat": 35.8156,
+     "lon": -117.3904,
+     "clearance_corrected_ft": 478.8
+    },
+    {
+     "seq": 29,
+     "lat": 35.8053,
+     "lon": -117.3917,
+     "clearance_corrected_ft": 485.0
+    }
+   ]
+  },
+  {
+   "flight_id": "MOCK-0005",
+   "mean_clearance": 332.9,
+   "std_clearance": 36.2,
+   "min_clearance": 282.8,
+   "start_altitude": 3617.6,
+   "cluster": 2.0,
+   "anomaly_score": 78.87522776864449,
+   "is_anomaly": true,
+   "start_lat": 36.07,
+   "start_lon": -117.9546,
+   "profile": [
+    {
+     "seq": 0,
+     "lat": 36.07,
+     "lon": -117.9546,
+     "clearance_corrected_ft": 358.0
+    },
+    {
+     "seq": 1,
+     "lat": 36.0802,
+     "lon": -117.9533,
+     "clearance_corrected_ft": 325.4
+    },
+    {
+     "seq": 2,
+     "lat": 36.0905,
+     "lon": -117.9519,
+     "clearance_corrected_ft": 312.1
+    },
+    {
+     "seq": 3,
+     "lat": 36.1008,
+     "lon": -117.9506,
+     "clearance_corrected_ft": 325.6
+    },
+    {
+     "seq": 4,
+     "lat": 36.111,
+     "lon": -117.9493,
+     "clearance_corrected_ft": 289.8
+    },
+    {
+     "seq": 5,
+     "lat": 36.1213,
+     "lon": -117.948,
+     "clearance_corrected_ft": 281.4
+    },
+    {
+     "seq": 6,
+     "lat": 36.1315,
+     "lon": -117.9467,
+     "clearance_corrected_ft": 337.4
+    },
+    {
+     "seq": 7,
+     "lat": 36.1418,
+     "lon": -117.9454,
+     "clearance_corrected_ft": 327.3
+    },
+    {
+     "seq": 8,
+     "lat": 36.1521,
+     "lon": -117.9441,
+     "clearance_corrected_ft": 301.7
+    },
+    {
+     "seq": 9,
+     "lat": 36.1623,
+     "lon": -117.9428,
+     "clearance_corrected_ft": 360.1
+    },
+    {
+     "seq": 10,
+     "lat": 36.1726,
+     "lon": -117.9415,
+     "clearance_corrected_ft": 435.4
+    },
+    {
+     "seq": 11,
+     "lat": 36.1829,
+     "lon": -117.9402,
+     "clearance_corrected_ft": 329.6
+    },
+    {
+     "seq": 12,
+     "lat": 36.1931,
+     "lon": -117.9388,
+     "clearance_corrected_ft": 345.4
+    },
+    {
+     "seq": 13,
+     "lat": 36.2034,
+     "lon": -117.9375,
+     "clearance_corrected_ft": 359.7
+    },
+    {
+     "seq": 14,
+     "lat": 36.2136,
+     "lon": -117.9362,
+     "clearance_corrected_ft": 288.3
+    },
+    {
+     "seq": 15,
+     "lat": 36.2239,
+     "lon": -117.9349,
+     "clearance_corrected_ft": 265.4
+    },
+    {
+     "seq": 16,
+     "lat": 36.2342,
+     "lon": -117.9336,
+     "clearance_corrected_ft": 314.1
+    },
+    {
+     "seq": 17,
+     "lat": 36.2444,
+     "lon": -117.9323,
+     "clearance_corrected_ft": 323.7
+    },
+    {
+     "seq": 18,
+     "lat": 36.2547,
+     "lon": -117.931,
+     "clearance_corrected_ft": 319.6
+    },
+    {
+     "seq": 19,
+     "lat": 36.2649,
+     "lon": -117.9297,
+     "clearance_corrected_ft": 395.0
+    },
+    {
+     "seq": 20,
+     "lat": 36.2752,
+     "lon": -117.9284,
+     "clearance_corrected_ft": 351.6
+    },
+    {
+     "seq": 21,
+     "lat": 36.2855,
+     "lon": -117.927,
+     "clearance_corrected_ft": 347.6
+    },
+    {
+     "seq": 22,
+     "lat": 36.2957,
+     "lon": -117.9257,
+     "clearance_corrected_ft": 307.4
+    },
+    {
+     "seq": 23,
+     "lat": 36.306,
+     "lon": -117.9244,
+     "clearance_corrected_ft": 291.6
+    },
+    {
+     "seq": 24,
+     "lat": 36.3163,
+     "lon": -117.9231,
+     "clearance_corrected_ft": 321.6
+    },
+    {
+     "seq": 25,
+     "lat": 36.3265,
+     "lon": -117.9218,
+     "clearance_corrected_ft": 322.7
+    },
+    {
+     "seq": 26,
+     "lat": 36.3368,
+     "lon": -117.9205,
+     "clearance_corrected_ft": 337.5
+    },
+    {
+     "seq": 27,
+     "lat": 36.347,
+     "lon": -117.9192,
+     "clearance_corrected_ft": 374.1
+    },
+    {
+     "seq": 28,
+     "lat": 36.3573,
+     "lon": -117.9179,
+     "clearance_corrected_ft": 400.4
+    },
+    {
+     "seq": 29,
+     "lat": 36.3676,
+     "lon": -117.9166,
+     "clearance_corrected_ft": 337.7
+    }
+   ]
+  },
+  {
+   "flight_id": "MOCK-0013",
+   "mean_clearance": 454.0,
+   "std_clearance": 20.4,
+   "min_clearance": 384.5,
+   "start_altitude": 3517.6,
+   "cluster": 0.0,
+   "anomaly_score": 39.840614112635876,
+   "is_anomaly": true,
+   "start_lat": 36.8605,
+   "start_lon": -117.0419,
+   "profile": [
+    {
+     "seq": 0,
+     "lat": 36.8605,
+     "lon": -117.0419,
+     "clearance_corrected_ft": 463.5
+    },
+    {
+     "seq": 1,
+     "lat": 36.8525,
+     "lon": -117.0484,
+     "clearance_corrected_ft": 451.5
+    },
+    {
+     "seq": 2,
+     "lat": 36.8445,
+     "lon": -117.055,
+     "clearance_corrected_ft": 449.5
+    },
+    {
+     "seq": 3,
+     "lat": 36.8365,
+     "lon": -117.0616,
+     "clearance_corrected_ft": 452.0
+    },
+    {
+     "seq": 4,
+     "lat": 36.8285,
+     "lon": -117.0681,
+     "clearance_corrected_ft": 447.5
+    },
+    {
+     "seq": 5,
+     "lat": 36.8205,
+     "lon": -117.0747,
+     "clearance_corrected_ft": 457.0
+    },
+    {
+     "seq": 6,
+     "lat": 36.8125,
+     "lon": -117.0812,
+     "clearance_corrected_ft": 475.5
+    },
+    {
+     "seq": 7,
+     "lat": 36.8045,
+     "lon": -117.0878,
+     "clearance_corrected_ft": 474.4
+    },
+    {
+     "seq": 8,
+     "lat": 36.7965,
+     "lon": -117.0944,
+     "clearance_corrected_ft": 474.1
+    },
+    {
+     "seq": 9,
+     "lat": 36.7885,
+     "lon": -117.1009,
+     "clearance_corrected_ft": 471.4
+    },
+    {
+     "seq": 10,
+     "lat": 36.7805,
+     "lon": -117.1075,
+     "clearance_corrected_ft": 479.7
+    },
+    {
+     "seq": 11,
+     "lat": 36.7725,
+     "lon": -117.114,
+     "clearance_corrected_ft": 462.3
+    },
+    {
+     "seq": 12,
+     "lat": 36.7645,
+     "lon": -117.1206,
+     "clearance_corrected_ft": 462.6
+    },
+    {
+     "seq": 13,
+     "lat": 36.7565,
+     "lon": -117.1272,
+     "clearance_corrected_ft": 459.0
+    },
+    {
+     "seq": 14,
+     "lat": 36.7485,
+     "lon": -117.1337,
+     "clearance_corrected_ft": 470.3
+    },
+    {
+     "seq": 15,
+     "lat": 36.7405,
+     "lon": -117.1403,
+     "clearance_corrected_ft": 473.4
+    },
+    {
+     "seq": 16,
+     "lat": 36.7325,
+     "lon": -117.1468,
+     "clearance_corrected_ft": 496.8
+    },
+    {
+     "seq": 17,
+     "lat": 36.7245,
+     "lon": -117.1534,
+     "clearance_corrected_ft": 479.6
+    },
+    {
+     "seq": 18,
+     "lat": 36.7165,
+     "lon": -117.16,
+     "clearance_corrected_ft": 461.0
+    },
+    {
+     "seq": 19,
+     "lat": 36.7085,
+     "lon": -117.1665,
+     "clearance_corrected_ft": 460.5
+    },
+    {
+     "seq": 20,
+     "lat": 36.7005,
+     "lon": -117.1731,
+     "clearance_corrected_ft": 435.7
+    },
+    {
+     "seq": 21,
+     "lat": 36.6925,
+     "lon": -117.1796,
+     "clearance_corrected_ft": 422.9
+    },
+    {
+     "seq": 22,
+     "lat": 36.6845,
+     "lon": -117.1862,
+     "clearance_corrected_ft": 439.9
+    },
+    {
+     "seq": 23,
+     "lat": 36.6765,
+     "lon": -117.1928,
+     "clearance_corrected_ft": 440.3
+    },
+    {
+     "seq": 24,
+     "lat": 36.6685,
+     "lon": -117.1993,
+     "clearance_corrected_ft": 415.3
+    },
+    {
+     "seq": 25,
+     "lat": 36.6605,
+     "lon": -117.2059,
+     "clearance_corrected_ft": 426.2
+    },
+    {
+     "seq": 26,
+     "lat": 36.6525,
+     "lon": -117.2125,
+     "clearance_corrected_ft": 426.6
+    },
+    {
+     "seq": 27,
+     "lat": 36.6445,
+     "lon": -117.219,
+     "clearance_corrected_ft": 417.4
+    },
+    {
+     "seq": 28,
+     "lat": 36.6365,
+     "lon": -117.2256,
+     "clearance_corrected_ft": 431.7
+    },
+    {
+     "seq": 29,
+     "lat": 36.6285,
+     "lon": -117.2321,
+     "clearance_corrected_ft": 442.4
+    }
+   ]
+  },
+  {
+   "flight_id": "MOCK-0038",
+   "mean_clearance": 146.4,
+   "std_clearance": 57.4,
+   "min_clearance": 65.8,
+   "start_altitude": 3691.4,
+   "cluster": 1.0,
+   "anomaly_score": 30.076187112897184,
+   "is_anomaly": false,
+   "start_lat": 36.1163,
+   "start_lon": -116.8552,
+   "profile": [
+    {
+     "seq": 0,
+     "lat": 36.1163,
+     "lon": -116.8552,
+     "clearance_corrected_ft": 145.2
+    },
+    {
+     "seq": 1,
+     "lat": 36.1234,
+     "lon": -116.8476,
+     "clearance_corrected_ft": 167.0
+    },
+    {
+     "seq": 2,
+     "lat": 36.1304,
+     "lon": -116.8401,
+     "clearance_corrected_ft": 133.8
+    },
+    {
+     "seq": 3,
+     "lat": 36.1374,
+     "lon": -116.8325,
+     "clearance_corrected_ft": 115.6
+    },
+    {
+     "seq": 4,
+     "lat": 36.1444,
+     "lon": -116.8249,
+     "clearance_corrected_ft": 111.0
+    },
+    {
+     "seq": 5,
+     "lat": 36.1515,
+     "lon": -116.8173,
+     "clearance_corrected_ft": 115.5
+    },
+    {
+     "seq": 6,
+     "lat": 36.1585,
+     "lon": -116.8097,
+     "clearance_corrected_ft": 137.9
+    },
+    {
+     "seq": 7,
+     "lat": 36.1655,
+     "lon": -116.8021,
+     "clearance_corrected_ft": 167.4
+    },
+    {
+     "seq": 8,
+     "lat": 36.1726,
+     "lon": -116.7945,
+     "clearance_corrected_ft": 231.5
+    },
+    {
+     "seq": 9,
+     "lat": 36.1796,
+     "lon": -116.7869,
+     "clearance_corrected_ft": 196.5
+    },
+    {
+     "seq": 10,
+     "lat": 36.1866,
+     "lon": -116.7793,
+     "clearance_corrected_ft": 233.3
+    },
+    {
+     "seq": 11,
+     "lat": 36.1937,
+     "lon": -116.7718,
+     "clearance_corrected_ft": 223.5
+    },
+    {
+     "seq": 12,
+     "lat": 36.2007,
+     "lon": -116.7642,
+     "clearance_corrected_ft": 215.7
+    },
+    {
+     "seq": 13,
+     "lat": 36.2077,
+     "lon": -116.7566,
+     "clearance_corrected_ft": 139.2
+    },
+    {
+     "seq": 14,
+     "lat": 36.2147,
+     "lon": -116.749,
+     "clearance_corrected_ft": 159.7
+    },
+    {
+     "seq": 15,
+     "lat": 36.2218,
+     "lon": -116.7414,
+     "clearance_corrected_ft": 156.5
+    },
+    {
+     "seq": 16,
+     "lat": 36.2288,
+     "lon": -116.7338,
+     "clearance_corrected_ft": 156.7
+    },
+    {
+     "seq": 17,
+     "lat": 36.2358,
+     "lon": -116.7262,
+     "clearance_corrected_ft": 158.8
+    },
+    {
+     "seq": 18,
+     "lat": 36.2429,
+     "lon": -116.7186,
+     "clearance_corrected_ft": 184.3
+    },
+    {
+     "seq": 19,
+     "lat": 36.2499,
+     "lon": -116.711,
+     "clearance_corrected_ft": 219.9
+    },
+    {
+     "seq": 20,
+     "lat": 36.2569,
+     "lon": -116.7035,
+     "clearance_corrected_ft": 203.0
+    },
+    {
+     "seq": 21,
+     "lat": 36.264,
+     "lon": -116.6959,
+     "clearance_corrected_ft": 156.4
+    },
+    {
+     "seq": 22,
+     "lat": 36.271,
+     "lon": -116.6883,
+     "clearance_corrected_ft": 139.3
+    },
+    {
+     "seq": 23,
+     "lat": 36.278,
+     "lon": -116.6807,
+     "clearance_corrected_ft": 102.4
+    },
+    {
+     "seq": 24,
+     "lat": 36.285,
+     "lon": -116.6731,
+     "clearance_corrected_ft": 5.3
+    },
+    {
+     "seq": 25,
+     "lat": 36.2921,
+     "lon": -116.6655,
+     "clearance_corrected_ft": 0
+    },
+    {
+     "seq": 26,
+     "lat": 36.2991,
+     "lon": -116.6579,
+     "clearance_corrected_ft": 71.9
+    },
+    {
+     "seq": 27,
+     "lat": 36.3061,
+     "lon": -116.6503,
+     "clearance_corrected_ft": 88.2
+    },
+    {
+     "seq": 28,
+     "lat": 36.3132,
+     "lon": -116.6427,
+     "clearance_corrected_ft": 105.8
+    },
+    {
+     "seq": 29,
+     "lat": 36.3202,
+     "lon": -116.6352,
+     "clearance_corrected_ft": 156.7
+    }
+   ]
+  },
+  {
+   "flight_id": "MOCK-0028",
+   "mean_clearance": 471.9,
+   "std_clearance": 30.4,
+   "min_clearance": 400.4,
+   "start_altitude": 3129.6,
+   "cluster": 0.0,
+   "anomaly_score": 19.969649115925137,
+   "is_anomaly": false,
+   "start_lat": 37.2645,
+   "start_lon": -116.8343,
+   "profile": [
+    {
+     "seq": 0,
+     "lat": 37.2645,
+     "lon": -116.8343,
+     "clearance_corrected_ft": 500.8
+    },
+    {
+     "seq": 1,
+     "lat": 37.2564,
+     "lon": -116.828,
+     "clearance_corrected_ft": 482.1
+    },
+    {
+     "seq": 2,
+     "lat": 37.2482,
+     "lon": -116.8216,
+     "clearance_corrected_ft": 491.0
+    },
+    {
+     "seq": 3,
+     "lat": 37.24,
+     "lon": -116.8153,
+     "clearance_corrected_ft": 462.8
+    },
+    {
+     "seq": 4,
+     "lat": 37.2318,
+     "lon": -116.809,
+     "clearance_corrected_ft": 473.1
+    },
+    {
+     "seq": 5,
+     "lat": 37.2237,
+     "lon": -116.8026,
+     "clearance_corrected_ft": 444.9
+    },
+    {
+     "seq": 6,
+     "lat": 37.2155,
+     "lon": -116.7963,
+     "clearance_corrected_ft": 462.0
+    },
+    {
+     "seq": 7,
+     "lat": 37.2073,
+     "lon": -116.79,
+     "clearance_corrected_ft": 452.2
+    },
+    {
+     "seq": 8,
+     "lat": 37.1991,
+     "lon": -116.7836,
+     "clearance_corrected_ft": 440.1
+    },
+    {
+     "seq": 9,
+     "lat": 37.191,
+     "lon": -116.7773,
+     "clearance_corrected_ft": 452.0
+    },
+    {
+     "seq": 10,
+     "lat": 37.1828,
+     "lon": -116.7709,
+     "clearance_corrected_ft": 503.7
+    },
+    {
+     "seq": 11,
+     "lat": 37.1746,
+     "lon": -116.7646,
+     "clearance_corrected_ft": 497.6
+    },
+    {
+     "seq": 12,
+     "lat": 37.1664,
+     "lon": -116.7583,
+     "clearance_corrected_ft": 512.3
+    },
+    {
+     "seq": 13,
+     "lat": 37.1583,
+     "lon": -116.7519,
+     "clearance_corrected_ft": 544.6
+    },
+    {
+     "seq": 14,
+     "lat": 37.1501,
+     "lon": -116.7456,
+     "clearance_corrected_ft": 462.4
+    },
+    {
+     "seq": 15,
+     "lat": 37.1419,
+     "lon": -116.7392,
+     "clearance_corrected_ft": 439.5
+    },
+    {
+     "seq": 16,
+     "lat": 37.1337,
+     "lon": -116.7329,
+     "clearance_corrected_ft": 447.1
+    },
+    {
+     "seq": 17,
+     "lat": 37.1256,
+     "lon": -116.7266,
+     "clearance_corrected_ft": 434.1
+    },
+    {
+     "seq": 18,
+     "lat": 37.1174,
+     "lon": -116.7202,
+     "clearance_corrected_ft": 406.5
+    },
+    {
+     "seq": 19,
+     "lat": 37.1092,
+     "lon": -116.7139,
+     "clearance_corrected_ft": 450.9
+    },
+    {
+     "seq": 20,
+     "lat": 37.101,
+     "lon": -116.7075,
+     "clearance_corrected_ft": 442.8
+    },
+    {
+     "seq": 21,
+     "lat": 37.0929,
+     "lon": -116.7012,
+     "clearance_corrected_ft": 466.5
+    },
+    {
+     "seq": 22,
+     "lat": 37.0847,
+     "lon": -116.6949,
+     "clearance_corrected_ft": 471.2
+    },
+    {
+     "seq": 23,
+     "lat": 37.0765,
+     "lon": -116.6885,
+     "clearance_corrected_ft": 491.5
+    },
+    {
+     "seq": 24,
+     "lat": 37.0683,
+     "lon": -116.6822,
+     "clearance_corrected_ft": 525.6
+    },
+    {
+     "seq": 25,
+     "lat": 37.0602,
+     "lon": -116.6758,
+     "clearance_corrected_ft": 518.5
+    },
+    {
+     "seq": 26,
+     "lat": 37.052,
+     "lon": -116.6695,
+     "clearance_corrected_ft": 488.6
+    },
+    {
+     "seq": 27,
+     "lat": 37.0438,
+     "lon": -116.6632,
+     "clearance_corrected_ft": 447.8
+    },
+    {
+     "seq": 28,
+     "lat": 37.0356,
+     "lon": -116.6568,
+     "clearance_corrected_ft": 477.7
+    },
+    {
+     "seq": 29,
+     "lat": 37.0275,
+     "lon": -116.6505,
+     "clearance_corrected_ft": 467.0
+    }
+   ]
+  },
+  {
+   "flight_id": "MOCK-0040",
+   "mean_clearance": 206.0,
+   "std_clearance": 50.4,
+   "min_clearance": 132.0,
+   "start_altitude": 2607.5,
+   "cluster": 1.0,
+   "anomaly_score": 30.065212975297655,
+   "is_anomaly": false,
+   "start_lat": 37.1537,
+   "start_lon": -117.8986,
+   "profile": [
+    {
+     "seq": 0,
+     "lat": 37.1537,
+     "lon": -117.8986,
+     "clearance_corrected_ft": 251.5
+    },
+    {
+     "seq": 1,
+     "lat": 37.1435,
+     "lon": -117.8969,
+     "clearance_corrected_ft": 263.6
+    },
+    {
+     "seq": 2,
+     "lat": 37.1333,
+     "lon": -117.8952,
+     "clearance_corrected_ft": 270.4
+    },
+    {
+     "seq": 3,
+     "lat": 37.1231,
+     "lon": -117.8934,
+     "clearance_corrected_ft": 257.1
+    },
+    {
+     "seq": 4,
+     "lat": 37.1129,
+     "lon": -117.8917,
+     "clearance_corrected_ft": 232.7
+    },
+    {
+     "seq": 5,
+     "lat": 37.1027,
+     "lon": -117.89,
+     "clearance_corrected_ft": 235.9
+    },
+    {
+     "seq": 6,
+     "lat": 37.0925,
+     "lon": -117.8883,
+     "clearance_corrected_ft": 234.1
+    },
+    {
+     "seq": 7,
+     "lat": 37.0823,
+     "lon": -117.8865,
+     "clearance_corrected_ft": 238.6
+    },
+    {
+     "seq": 8,
+     "lat": 37.0721,
+     "lon": -117.8848,
+     "clearance_corrected_ft": 246.9
+    },
+    {
+     "seq": 9,
+     "lat": 37.0619,
+     "lon": -117.8831,
+     "clearance_corrected_ft": 230.1
+    },
+    {
+     "seq": 10,
+     "lat": 37.0517,
+     "lon": -117.8814,
+     "clearance_corrected_ft": 170.9
+    },
+    {
+     "seq": 11,
+     "lat": 37.0415,
+     "lon": -117.8797,
+     "clearance_corrected_ft": 183.9
+    },
+    {
+     "seq": 12,
+     "lat": 37.0313,
+     "lon": -117.8779,
+     "clearance_corrected_ft": 167.6
+    },
+    {
+     "seq": 13,
+     "lat": 37.0211,
+     "lon": -117.8762,
+     "clearance_corrected_ft": 171.8
+    },
+    {
+     "seq": 14,
+     "lat": 37.0109,
+     "lon": -117.8745,
+     "clearance_corrected_ft": 203.3
+    },
+    {
+     "seq": 15,
+     "lat": 37.0007,
+     "lon": -117.8728,
+     "clearance_corrected_ft": 209.5
+    },
+    {
+     "seq": 16,
+     "lat": 36.9905,
+     "lon": -117.8711,
+     "clearance_corrected_ft": 122.1
+    },
+    {
+     "seq": 17,
+     "lat": 36.9803,
+     "lon": -117.8693,
+     "clearance_corrected_ft": 127.7
+    },
+    {
+     "seq": 18,
+     "lat": 36.9701,
+     "lon": -117.8676,
+     "clearance_corrected_ft": 105.5
+    },
+    {
+     "seq": 19,
+     "lat": 36.9599,
+     "lon": -117.8659,
+     "clearance_corrected_ft": 144.6
+    },
+    {
+     "seq": 20,
+     "lat": 36.9497,
+     "lon": -117.8642,
+     "clearance_corrected_ft": 113.5
+    },
+    {
+     "seq": 21,
+     "lat": 36.9395,
+     "lon": -117.8625,
+     "clearance_corrected_ft": 190.4
+    },
+    {
+     "seq": 22,
+     "lat": 36.9293,
+     "lon": -117.8607,
+     "clearance_corrected_ft": 252.7
+    },
+    {
+     "seq": 23,
+     "lat": 36.9191,
+     "lon": -117.859,
+     "clearance_corrected_ft": 271.9
+    },
+    {
+     "seq": 24,
+     "lat": 36.9088,
+     "lon": -117.8573,
+     "clearance_corrected_ft": 219.2
+    },
+    {
+     "seq": 25,
+     "lat": 36.8986,
+     "lon": -117.8556,
+     "clearance_corrected_ft": 253.3
+    },
+    {
+     "seq": 26,
+     "lat": 36.8884,
+     "lon": -117.8539,
+     "clearance_corrected_ft": 232.8
+    },
+    {
+     "seq": 27,
+     "lat": 36.8782,
+     "lon": -117.8521,
+     "clearance_corrected_ft": 143.6
+    },
+    {
+     "seq": 28,
+     "lat": 36.868,
+     "lon": -117.8504,
+     "clearance_corrected_ft": 171.0
+    },
+    {
+     "seq": 29,
+     "lat": 36.8578,
+     "lon": -117.8487,
+     "clearance_corrected_ft": 263.8
+    }
+   ]
+  },
+  {
+   "flight_id": "MOCK-0007",
+   "mean_clearance": 457.7,
+   "std_clearance": 43.7,
+   "min_clearance": 389.4,
+   "start_altitude": 3931.7,
+   "cluster": 0.0,
+   "anomaly_score": 35.43282547451278,
+   "is_anomaly": false,
+   "start_lat": 36.346,
+   "start_lon": -116.5451,
+   "profile": [
+    {
+     "seq": 0,
+     "lat": 36.346,
+     "lon": -116.5451,
+     "clearance_corrected_ft": 399.4
+    },
+    {
+     "seq": 1,
+     "lat": 36.3487,
+     "lon": -116.5352,
+     "clearance_corrected_ft": 417.8
+    },
+    {
+     "seq": 2,
+     "lat": 36.3514,
+     "lon": -116.5252,
+     "clearance_corrected_ft": 484.4
+    },
+    {
+     "seq": 3,
+     "lat": 36.3541,
+     "lon": -116.5152,
+     "clearance_corrected_ft": 517.3
+    },
+    {
+     "seq": 4,
+     "lat": 36.3568,
+     "lon": -116.5052,
+     "clearance_corrected_ft": 499.8
+    },
+    {
+     "seq": 5,
+     "lat": 36.3595,
+     "lon": -116.4952,
+     "clearance_corrected_ft": 568.6
+    },
+    {
+     "seq": 6,
+     "lat": 36.3623,
+     "lon": -116.4852,
+     "clearance_corrected_ft": 537.8
+    },
+    {
+     "seq": 7,
+     "lat": 36.365,
+     "lon": -116.4753,
+     "clearance_corrected_ft": 486.9
+    },
+    {
+     "seq": 8,
+     "lat": 36.3677,
+     "lon": -116.4653,
+     "clearance_corrected_ft": 448.1
+    },
+    {
+     "seq": 9,
+     "lat": 36.3704,
+     "lon": -116.4553,
+     "clearance_corrected_ft": 435.8
+    },
+    {
+     "seq": 10,
+     "lat": 36.3731,
+     "lon": -116.4453,
+     "clearance_corrected_ft": 424.4
+    },
+    {
+     "seq": 11,
+     "lat": 36.3758,
+     "lon": -116.4353,
+     "clearance_corrected_ft": 452.2
+    },
+    {
+     "seq": 12,
+     "lat": 36.3785,
+     "lon": -116.4253,
+     "clearance_corrected_ft": 443.8
+    },
+    {
+     "seq": 13,
+     "lat": 36.3812,
+     "lon": -116.4154,
+     "clearance_corrected_ft": 455.8
+    },
+    {
+     "seq": 14,
+     "lat": 36.3839,
+     "lon": -116.4054,
+     "clearance_corrected_ft": 442.7
+    },
+    {
+     "seq": 15,
+     "lat": 36.3866,
+     "lon": -116.3954,
+     "clearance_corrected_ft": 414.1
+    },
+    {
+     "seq": 16,
+     "lat": 36.3894,
+     "lon": -116.3854,
+     "clearance_corrected_ft": 386.1
+    },
+    {
+     "seq": 17,
+     "lat": 36.3921,
+     "lon": -116.3754,
+     "clearance_corrected_ft": 413.9
+    },
+    {
+     "seq": 18,
+     "lat": 36.3948,
+     "lon": -116.3654,
+     "clearance_corrected_ft": 441.6
+    },
+    {
+     "seq": 19,
+     "lat": 36.3975,
+     "lon": -116.3555,
+     "clearance_corrected_ft": 446.6
+    },
+    {
+     "seq": 20,
+     "lat": 36.4002,
+     "lon": -116.3455,
+     "clearance_corrected_ft": 438.6
+    },
+    {
+     "seq": 21,
+     "lat": 36.4029,
+     "lon": -116.3355,
+     "clearance_corrected_ft": 448.5
+    },
+    {
+     "seq": 22,
+     "lat": 36.4056,
+     "lon": -116.3255,
+     "clearance_corrected_ft": 441.3
+    },
+    {
+     "seq": 23,
+     "lat": 36.4083,
+     "lon": -116.3155,
+     "clearance_corrected_ft": 446.3
+    },
+    {
+     "seq": 24,
+     "lat": 36.411,
+     "lon": -116.3055,
+     "clearance_corrected_ft": 498.5
+    },
+    {
+     "seq": 25,
+     "lat": 36.4137,
+     "lon": -116.2955,
+     "clearance_corrected_ft": 513.7
+    },
+    {
+     "seq": 26,
+     "lat": 36.4165,
+     "lon": -116.2856,
+     "clearance_corrected_ft": 510.1
+    },
+    {
+     "seq": 27,
+     "lat": 36.4192,
+     "lon": -116.2756,
+     "clearance_corrected_ft": 471.5
+    },
+    {
+     "seq": 28,
+     "lat": 36.4219,
+     "lon": -116.2656,
+     "clearance_corrected_ft": 468.7
+    },
+    {
+     "seq": 29,
+     "lat": 36.4246,
+     "lon": -116.2556,
+     "clearance_corrected_ft": 376.9
+    }
+   ]
+  },
+  {
+   "flight_id": "MOCK-0026",
+   "mean_clearance": 428.9,
+   "std_clearance": 42.9,
+   "min_clearance": 354.0,
+   "start_altitude": 2992.3,
+   "cluster": 2.0,
+   "anomaly_score": 18.198522528552317,
+   "is_anomaly": false,
+   "start_lat": 36.9655,
+   "start_lon": -116.5742,
+   "profile": [
+    {
+     "seq": 0,
+     "lat": 36.9655,
+     "lon": -116.5742,
+     "clearance_corrected_ft": 388.4
+    },
+    {
+     "seq": 1,
+     "lat": 36.9561,
+     "lon": -116.57,
+     "clearance_corrected_ft": 445.0
+    },
+    {
+     "seq": 2,
+     "lat": 36.9466,
+     "lon": -116.5658,
+     "clearance_corrected_ft": 490.4
+    },
+    {
+     "seq": 3,
+     "lat": 36.9372,
+     "lon": -116.5616,
+     "clearance_corrected_ft": 480.8
+    },
+    {
+     "seq": 4,
+     "lat": 36.9277,
+     "lon": -116.5574,
+     "clearance_corrected_ft": 469.2
+    },
+    {
+     "seq": 5,
+     "lat": 36.9182,
+     "lon": -116.5532,
+     "clearance_corrected_ft": 452.9
+    },
+    {
+     "seq": 6,
+     "lat": 36.9088,
+     "lon": -116.549,
+     "clearance_corrected_ft": 395.6
+    },
+    {
+     "seq": 7,
+     "lat": 36.8993,
+     "lon": -116.5448,
+     "clearance_corrected_ft": 363.4
+    },
+    {
+     "seq": 8,
+     "lat": 36.8899,
+     "lon": -116.5406,
+     "clearance_corrected_ft": 384.5
+    },
+    {
+     "seq": 9,
+     "lat": 36.8804,
+     "lon": -116.5364,
+     "clearance_corrected_ft": 384.9
+    },
+    {
+     "seq": 10,
+     "lat": 36.871,
+     "lon": -116.5322,
+     "clearance_corrected_ft": 412.4
+    },
+    {
+     "seq": 11,
+     "lat": 36.8615,
+     "lon": -116.528,
+     "clearance_corrected_ft": 441.6
+    },
+    {
+     "seq": 12,
+     "lat": 36.8521,
+     "lon": -116.5238,
+     "clearance_corrected_ft": 494.3
+    },
+    {
+     "seq": 13,
+     "lat": 36.8426,
+     "lon": -116.5196,
+     "clearance_corrected_ft": 480.4
+    },
+    {
+     "seq": 14,
+     "lat": 36.8332,
+     "lon": -116.5154,
+     "clearance_corrected_ft": 519.6
+    },
+    {
+     "seq": 15,
+     "lat": 36.8237,
+     "lon": -116.5112,
+     "clearance_corrected_ft": 490.3
+    },
+    {
+     "seq": 16,
+     "lat": 36.8142,
+     "lon": -116.507,
+     "clearance_corrected_ft": 456.1
+    },
+    {
+     "seq": 17,
+     "lat": 36.8048,
+     "lon": -116.5028,
+     "clearance_corrected_ft": 422.6
+    },
+    {
+     "seq": 18,
+     "lat": 36.7953,
+     "lon": -116.4986,
+     "clearance_corrected_ft": 403.1
+    },
+    {
+     "seq": 19,
+     "lat": 36.7859,
+     "lon": -116.4944,
+     "clearance_corrected_ft": 357.0
+    },
+    {
+     "seq": 20,
+     "lat": 36.7764,
+     "lon": -116.4902,
+     "clearance_corrected_ft": 378.8
+    },
+    {
+     "seq": 21,
+     "lat": 36.767,
+     "lon": -116.486,
+     "clearance_corrected_ft": 383.5
+    },
+    {
+     "seq": 22,
+     "lat": 36.7575,
+     "lon": -116.4818,
+     "clearance_corrected_ft": 396.6
+    },
+    {
+     "seq": 23,
+     "lat": 36.7481,
+     "lon": -116.4776,
+     "clearance_corrected_ft": 450.8
+    },
+    {
+     "seq": 24,
+     "lat": 36.7386,
+     "lon": -116.4734,
+     "clearance_corrected_ft": 443.9
+    },
+    {
+     "seq": 25,
+     "lat": 36.7292,
+     "lon": -116.4692,
+     "clearance_corrected_ft": 406.8
+    },
+    {
+     "seq": 26,
+     "lat": 36.7197,
+     "lon": -116.465,
+     "clearance_corrected_ft": 415.4
+    },
+    {
+     "seq": 27,
+     "lat": 36.7102,
+     "lon": -116.4608,
+     "clearance_corrected_ft": 419.6
+    },
+    {
+     "seq": 28,
+     "lat": 36.7008,
+     "lon": -116.4566,
+     "clearance_corrected_ft": 387.1
+    },
+    {
+     "seq": 29,
+     "lat": 36.6913,
+     "lon": -116.4524,
+     "clearance_corrected_ft": 452.1
+    }
+   ]
+  },
+  {
+   "flight_id": "MOCK-0010",
+   "mean_clearance": 398.8,
+   "std_clearance": 35.7,
+   "min_clearance": 307.7,
+   "start_altitude": 2736.7,
+   "cluster": 2.0,
+   "anomaly_score": 13.015486502198089,
+   "is_anomaly": false,
+   "start_lat": 36.8302,
+   "start_lon": -116.7894,
+   "profile": [
+    {
+     "seq": 0,
+     "lat": 36.8302,
+     "lon": -116.7894,
+     "clearance_corrected_ft": 432.9
+    },
+    {
+     "seq": 1,
+     "lat": 36.8201,
+     "lon": -116.7872,
+     "clearance_corrected_ft": 442.6
+    },
+    {
+     "seq": 2,
+     "lat": 36.81,
+     "lon": -116.785,
+     "clearance_corrected_ft": 427.3
+    },
+    {
+     "seq": 3,
+     "lat": 36.7999,
+     "lon": -116.7828,
+     "clearance_corrected_ft": 456.3
+    },
+    {
+     "seq": 4,
+     "lat": 36.7898,
+     "lon": -116.7806,
+     "clearance_corrected_ft": 411.6
+    },
+    {
+     "seq": 5,
+     "lat": 36.7797,
+     "lon": -116.7784,
+     "clearance_corrected_ft": 446.6
+    },
+    {
+     "seq": 6,
+     "lat": 36.7695,
+     "lon": -116.7762,
+     "clearance_corrected_ft": 419.2
+    },
+    {
+     "seq": 7,
+     "lat": 36.7594,
+     "lon": -116.774,
+     "clearance_corrected_ft": 454.8
+    },
+    {
+     "seq": 8,
+     "lat": 36.7493,
+     "lon": -116.7718,
+     "clearance_corrected_ft": 448.4
+    },
+    {
+     "seq": 9,
+     "lat": 36.7392,
+     "lon": -116.7696,
+     "clearance_corrected_ft": 471.7
+    },
+    {
+     "seq": 10,
+     "lat": 36.7291,
+     "lon": -116.7674,
+     "clearance_corrected_ft": 395.8
+    },
+    {
+     "seq": 11,
+     "lat": 36.719,
+     "lon": -116.7652,
+     "clearance_corrected_ft": 392.0
+    },
+    {
+     "seq": 12,
+     "lat": 36.7089,
+     "lon": -116.763,
+     "clearance_corrected_ft": 381.1
+    },
+    {
+     "seq": 13,
+     "lat": 36.6988,
+     "lon": -116.7608,
+     "clearance_corrected_ft": 370.2
+    },
+    {
+     "seq": 14,
+     "lat": 36.6887,
+     "lon": -116.7586,
+     "clearance_corrected_ft": 386.6
+    },
+    {
+     "seq": 15,
+     "lat": 36.6786,
+     "lon": -116.7564,
+     "clearance_corrected_ft": 422.9
+    },
+    {
+     "seq": 16,
+     "lat": 36.6685,
+     "lon": -116.7542,
+     "clearance_corrected_ft": 410.9
+    },
+    {
+     "seq": 17,
+     "lat": 36.6584,
+     "lon": -116.7519,
+     "clearance_corrected_ft": 384.1
+    },
+    {
+     "seq": 18,
+     "lat": 36.6483,
+     "lon": -116.7497,
+     "clearance_corrected_ft": 398.4
+    },
+    {
+     "seq": 19,
+     "lat": 36.6382,
+     "lon": -116.7475,
+     "clearance_corrected_ft": 378.2
+    },
+    {
+     "seq": 20,
+     "lat": 36.628,
+     "lon": -116.7453,
+     "clearance_corrected_ft": 362.4
+    },
+    {
+     "seq": 21,
+     "lat": 36.6179,
+     "lon": -116.7431,
+     "clearance_corrected_ft": 366.4
+    },
+    {
+     "seq": 22,
+     "lat": 36.6078,
+     "lon": -116.7409,
+     "clearance_corrected_ft": 369.9
+    },
+    {
+     "seq": 23,
+     "lat": 36.5977,
+     "lon": -116.7387,
+     "clearance_corrected_ft": 359.7
+    },
+    {
+     "seq": 24,
+     "lat": 36.5876,
+     "lon": -116.7365,
+     "clearance_corrected_ft": 337.3
+    },
+    {
+     "seq": 25,
+     "lat": 36.5775,
+     "lon": -116.7343,
+     "clearance_corrected_ft": 346.1
+    },
+    {
+     "seq": 26,
+     "lat": 36.5674,
+     "lon": -116.7321,
+     "clearance_corrected_ft": 376.9
+    },
+    {
+     "seq": 27,
+     "lat": 36.5573,
+     "lon": -116.7299,
+     "clearance_corrected_ft": 354.8
+    },
+    {
+     "seq": 28,
+     "lat": 36.5472,
+     "lon": -116.7277,
+     "clearance_corrected_ft": 373.4
+    },
+    {
+     "seq": 29,
+     "lat": 36.5371,
+     "lon": -116.7255,
+     "clearance_corrected_ft": 385.0
+    }
+   ]
+  },
+  {
+   "flight_id": "MOCK-0014",
+   "mean_clearance": 517.6,
+   "std_clearance": 31.8,
+   "min_clearance": 439.6,
+   "start_altitude": 3088.9,
+   "cluster": 0.0,
+   "anomaly_score": 26.02540281523901,
+   "is_anomaly": false,
+   "start_lat": 36.8721,
+   "start_lon": -116.5782,
+   "profile": [
+    {
+     "seq": 0,
+     "lat": 36.8721,
+     "lon": -116.5782,
+     "clearance_corrected_ft": 559.3
+    },
+    {
+     "seq": 1,
+     "lat": 36.8801,
+     "lon": -116.5848,
+     "clearance_corrected_ft": 539.3
+    },
+    {
+     "seq": 2,
+     "lat": 36.888,
+     "lon": -116.5914,
+     "clearance_corrected_ft": 553.0
+    },
+    {
+     "seq": 3,
+     "lat": 36.8959,
+     "lon": -116.5981,
+     "clearance_corrected_ft": 557.8
+    },
+    {
+     "seq": 4,
+     "lat": 36.9039,
+     "lon": -116.6047,
+     "clearance_corrected_ft": 561.7
+    },
+    {
+     "seq": 5,
+     "lat": 36.9118,
+     "lon": -116.6114,
+     "clearance_corrected_ft": 554.4
+    },
+    {
+     "seq": 6,
+     "lat": 36.9197,
+     "lon": -116.618,
+     "clearance_corrected_ft": 539.3
+    },
+    {
+     "seq": 7,
+     "lat": 36.9277,
+     "lon": -116.6246,
+     "clearance_corrected_ft": 543.9
+    },
+    {
+     "seq": 8,
+     "lat": 36.9356,
+     "lon": -116.6313,
+     "clearance_corrected_ft": 551.6
+    },
+    {
+     "seq": 9,
+     "lat": 36.9435,
+     "lon": -116.6379,
+     "clearance_corrected_ft": 532.8
+    },
+    {
+     "seq": 10,
+     "lat": 36.9515,
+     "lon": -116.6446,
+     "clearance_corrected_ft": 555.8
+    },
+    {
+     "seq": 11,
+     "lat": 36.9594,
+     "lon": -116.6512,
+     "clearance_corrected_ft": 520.2
+    },
+    {
+     "seq": 12,
+     "lat": 36.9673,
+     "lon": -116.6578,
+     "clearance_corrected_ft": 533.4
+    },
+    {
+     "seq": 13,
+     "lat": 36.9753,
+     "lon": -116.6645,
+     "clearance_corrected_ft": 488.6
+    },
+    {
+     "seq": 14,
+     "lat": 36.9832,
+     "lon": -116.6711,
+     "clearance_corrected_ft": 468.9
+    },
+    {
+     "seq": 15,
+     "lat": 36.9911,
+     "lon": -116.6778,
+     "clearance_corrected_ft": 468.4
+    },
+    {
+     "seq": 16,
+     "lat": 36.9991,
+     "lon": -116.6844,
+     "clearance_corrected_ft": 530.5
+    },
+    {
+     "seq": 17,
+     "lat": 37.007,
+     "lon": -116.691,
+     "clearance_corrected_ft": 482.7
+    },
+    {
+     "seq": 18,
+     "lat": 37.0149,
+     "lon": -116.6977,
+     "clearance_corrected_ft": 482.6
+    },
+    {
+     "seq": 19,
+     "lat": 37.0229,
+     "lon": -116.7043,
+     "clearance_corrected_ft": 505.9
+    },
+    {
+     "seq": 20,
+     "lat": 37.0308,
+     "lon": -116.711,
+     "clearance_corrected_ft": 482.4
+    },
+    {
+     "seq": 21,
+     "lat": 37.0387,
+     "lon": -116.7176,
+     "clearance_corrected_ft": 466.5
+    },
+    {
+     "seq": 22,
+     "lat": 37.0467,
+     "lon": -116.7242,
+     "clearance_corrected_ft": 482.2
+    },
+    {
+     "seq": 23,
+     "lat": 37.0546,
+     "lon": -116.7309,
+     "clearance_corrected_ft": 490.3
+    },
+    {
+     "seq": 24,
+     "lat": 37.0625,
+     "lon": -116.7375,
+     "clearance_corrected_ft": 519.4
+    },
+    {
+     "seq": 25,
+     "lat": 37.0704,
+     "lon": -116.7442,
+     "clearance_corrected_ft": 527.6
+    },
+    {
+     "seq": 26,
+     "lat": 37.0784,
+     "lon": -116.7508,
+     "clearance_corrected_ft": 528.7
+    },
+    {
+     "seq": 27,
+     "lat": 37.0863,
+     "lon": -116.7574,
+     "clearance_corrected_ft": 525.1
+    },
+    {
+     "seq": 28,
+     "lat": 37.0942,
+     "lon": -116.7641,
+     "clearance_corrected_ft": 514.4
+    },
+    {
+     "seq": 29,
+     "lat": 37.1022,
+     "lon": -116.7707,
+     "clearance_corrected_ft": 461.3
+    }
+   ]
+  },
+  {
+   "flight_id": "MOCK-0032",
+   "mean_clearance": 425.6,
+   "std_clearance": 23.7,
+   "min_clearance": 339.7,
+   "start_altitude": 2682.2,
+   "cluster": 2.0,
+   "anomaly_score": 19.010318835364195,
+   "is_anomaly": false,
+   "start_lat": 36.3048,
+   "start_lon": -116.5569,
+   "profile": [
+    {
+     "seq": 0,
+     "lat": 36.3048,
+     "lon": -116.5569,
+     "clearance_corrected_ft": 482.2
+    },
+    {
+     "seq": 1,
+     "lat": 36.3022,
+     "lon": -116.5469,
+     "clearance_corrected_ft": 453.1
+    },
+    {
+     "seq": 2,
+     "lat": 36.2997,
+     "lon": -116.5369,
+     "clearance_corrected_ft": 430.7
+    },
+    {
+     "seq": 3,
+     "lat": 36.2972,
+     "lon": -116.5268,
+     "clearance_corrected_ft": 404.3
+    },
+    {
+     "seq": 4,
+     "lat": 36.2947,
+     "lon": -116.5168,
+     "clearance_corrected_ft": 382.1
+    },
+    {
+     "seq": 5,
+     "lat": 36.2922,
+     "lon": -116.5068,
+     "clearance_corrected_ft": 417.6
+    },
+    {
+     "seq": 6,
+     "lat": 36.2896,
+     "lon": -116.4967,
+     "clearance_corrected_ft": 429.0
+    },
+    {
+     "seq": 7,
+     "lat": 36.2871,
+     "lon": -116.4867,
+     "clearance_corrected_ft": 421.7
+    },
+    {
+     "seq": 8,
+     "lat": 36.2846,
+     "lon": -116.4767,
+     "clearance_corrected_ft": 440.5
+    },
+    {
+     "seq": 9,
+     "lat": 36.2821,
+     "lon": -116.4666,
+     "clearance_corrected_ft": 452.8
+    },
+    {
+     "seq": 10,
+     "lat": 36.2796,
+     "lon": -116.4566,
+     "clearance_corrected_ft": 383.3
+    },
+    {
+     "seq": 11,
+     "lat": 36.277,
+     "lon": -116.4466,
+     "clearance_corrected_ft": 411.7
+    },
+    {
+     "seq": 12,
+     "lat": 36.2745,
+     "lon": -116.4365,
+     "clearance_corrected_ft": 417.7
+    },
+    {
+     "seq": 13,
+     "lat": 36.272,
+     "lon": -116.4265,
+     "clearance_corrected_ft": 444.3
+    },
+    {
+     "seq": 14,
+     "lat": 36.2695,
+     "lon": -116.4165,
+     "clearance_corrected_ft": 397.2
+    },
+    {
+     "seq": 15,
+     "lat": 36.267,
+     "lon": -116.4064,
+     "clearance_corrected_ft": 445.6
+    },
+    {
+     "seq": 16,
+     "lat": 36.2645,
+     "lon": -116.3964,
+     "clearance_corrected_ft": 406.7
+    },
+    {
+     "seq": 17,
+     "lat": 36.2619,
+     "lon": -116.3864,
+     "clearance_corrected_ft": 408.6
+    },
+    {
+     "seq": 18,
+     "lat": 36.2594,
+     "lon": -116.3763,
+     "clearance_corrected_ft": 415.2
+    },
+    {
+     "seq": 19,
+     "lat": 36.2569,
+     "lon": -116.3663,
+     "clearance_corrected_ft": 451.5
+    },
+    {
+     "seq": 20,
+     "lat": 36.2544,
+     "lon": -116.3563,
+     "clearance_corrected_ft": 449.2
+    },
+    {
+     "seq": 21,
+     "lat": 36.2519,
+     "lon": -116.3462,
+     "clearance_corrected_ft": 461.4
+    },
+    {
+     "seq": 22,
+     "lat": 36.2493,
+     "lon": -116.3362,
+     "clearance_corrected_ft": 443.9
+    },
+    {
+     "seq": 23,
+     "lat": 36.2468,
+     "lon": -116.3262,
+     "clearance_corrected_ft": 409.9
+    },
+    {
+     "seq": 24,
+     "lat": 36.2443,
+     "lon": -116.3161,
+     "clearance_corrected_ft": 393.7
+    },
+    {
+     "seq": 25,
+     "lat": 36.2418,
+     "lon": -116.3061,
+     "clearance_corrected_ft": 399.7
+    },
+    {
+     "seq": 26,
+     "lat": 36.2393,
+     "lon": -116.296,
+     "clearance_corrected_ft": 414.5
+    },
+    {
+     "seq": 27,
+     "lat": 36.2368,
+     "lon": -116.286,
+     "clearance_corrected_ft": 429.3
+    },
+    {
+     "seq": 28,
+     "lat": 36.2342,
+     "lon": -116.276,
+     "clearance_corrected_ft": 435.5
+    },
+    {
+     "seq": 29,
+     "lat": 36.2317,
+     "lon": -116.2659,
+     "clearance_corrected_ft": 435.4
+    }
+   ]
+  },
+  {
+   "flight_id": "MOCK-0035",
+   "mean_clearance": 204.6,
+   "std_clearance": 57.1,
+   "min_clearance": 122.8,
+   "start_altitude": 3173.1,
+   "cluster": 1.0,
+   "anomaly_score": 28.189129664642106,
+   "is_anomaly": false,
+   "start_lat": 36.4045,
+   "start_lon": -116.8113,
+   "profile": [
+    {
+     "seq": 0,
+     "lat": 36.4045,
+     "lon": -116.8113,
+     "clearance_corrected_ft": 196.1
+    },
+    {
+     "seq": 1,
+     "lat": 36.4086,
+     "lon": -116.8019,
+     "clearance_corrected_ft": 179.9
+    },
+    {
+     "seq": 2,
+     "lat": 36.4128,
+     "lon": -116.7924,
+     "clearance_corrected_ft": 219.1
+    },
+    {
+     "seq": 3,
+     "lat": 36.417,
+     "lon": -116.7829,
+     "clearance_corrected_ft": 248.6
+    },
+    {
+     "seq": 4,
+     "lat": 36.4211,
+     "lon": -116.7735,
+     "clearance_corrected_ft": 306.7
+    },
+    {
+     "seq": 5,
+     "lat": 36.4253,
+     "lon": -116.764,
+     "clearance_corrected_ft": 299.4
+    },
+    {
+     "seq": 6,
+     "lat": 36.4294,
+     "lon": -116.7545,
+     "clearance_corrected_ft": 317.9
+    },
+    {
+     "seq": 7,
+     "lat": 36.4336,
+     "lon": -116.7451,
+     "clearance_corrected_ft": 227.0
+    },
+    {
+     "seq": 8,
+     "lat": 36.4378,
+     "lon": -116.7356,
+     "clearance_corrected_ft": 219.2
+    },
+    {
+     "seq": 9,
+     "lat": 36.4419,
+     "lon": -116.7261,
+     "clearance_corrected_ft": 172.4
+    },
+    {
+     "seq": 10,
+     "lat": 36.4461,
+     "lon": -116.7166,
+     "clearance_corrected_ft": 196.8
+    },
+    {
+     "seq": 11,
+     "lat": 36.4503,
+     "lon": -116.7072,
+     "clearance_corrected_ft": 239.1
+    },
+    {
+     "seq": 12,
+     "lat": 36.4544,
+     "lon": -116.6977,
+     "clearance_corrected_ft": 214.9
+    },
+    {
+     "seq": 13,
+     "lat": 36.4586,
+     "lon": -116.6882,
+     "clearance_corrected_ft": 232.7
+    },
+    {
+     "seq": 14,
+     "lat": 36.4628,
+     "lon": -116.6788,
+     "clearance_corrected_ft": 186.2
+    },
+    {
+     "seq": 15,
+     "lat": 36.4669,
+     "lon": -116.6693,
+     "clearance_corrected_ft": 136.4
+    },
+    {
+     "seq": 16,
+     "lat": 36.4711,
+     "lon": -116.6598,
+     "clearance_corrected_ft": 119.5
+    },
+    {
+     "seq": 17,
+     "lat": 36.4752,
+     "lon": -116.6504,
+     "clearance_corrected_ft": 77.7
+    },
+    {
+     "seq": 18,
+     "lat": 36.4794,
+     "lon": -116.6409,
+     "clearance_corrected_ft": 79.2
+    },
+    {
+     "seq": 19,
+     "lat": 36.4836,
+     "lon": -116.6314,
+     "clearance_corrected_ft": 166.6
+    },
+    {
+     "seq": 20,
+     "lat": 36.4877,
+     "lon": -116.6219,
+     "clearance_corrected_ft": 193.4
+    },
+    {
+     "seq": 21,
+     "lat": 36.4919,
+     "lon": -116.6125,
+     "clearance_corrected_ft": 185.8
+    },
+    {
+     "seq": 22,
+     "lat": 36.4961,
+     "lon": -116.603,
+     "clearance_corrected_ft": 285.4
+    },
+    {
+     "seq": 23,
+     "lat": 36.5002,
+     "lon": -116.5935,
+     "clearance_corrected_ft": 222.9
+    },
+    {
+     "seq": 24,
+     "lat": 36.5044,
+     "lon": -116.5841,
+     "clearance_corrected_ft": 198.3
+    },
+    {
+     "seq": 25,
+     "lat": 36.5086,
+     "lon": -116.5746,
+     "clearance_corrected_ft": 175.2
+    },
+    {
+     "seq": 26,
+     "lat": 36.5127,
+     "lon": -116.5651,
+     "clearance_corrected_ft": 205.4
+    },
+    {
+     "seq": 27,
+     "lat": 36.5169,
+     "lon": -116.5557,
+     "clearance_corrected_ft": 156.8
+    },
+    {
+     "seq": 28,
+     "lat": 36.5211,
+     "lon": -116.5462,
+     "clearance_corrected_ft": 227.7
+    },
+    {
+     "seq": 29,
+     "lat": 36.5252,
+     "lon": -116.5367,
+     "clearance_corrected_ft": 251.9
+    }
+   ]
+  },
+  {
+   "flight_id": "MOCK-0009",
+   "mean_clearance": 449.0,
+   "std_clearance": 41.8,
+   "min_clearance": 357.0,
+   "start_altitude": 2880.1,
+   "cluster": 2.0,
+   "anomaly_score": 37.56808338056235,
+   "is_anomaly": true,
+   "start_lat": 37.1333,
+   "start_lon": -117.495,
+   "profile": [
+    {
+     "seq": 0,
+     "lat": 37.1333,
+     "lon": -117.495,
+     "clearance_corrected_ft": 446.5
+    },
+    {
+     "seq": 1,
+     "lat": 37.1424,
+     "lon": -117.4901,
+     "clearance_corrected_ft": 464.9
+    },
+    {
+     "seq": 2,
+     "lat": 37.1516,
+     "lon": -117.4853,
+     "clearance_corrected_ft": 451.8
+    },
+    {
+     "seq": 3,
+     "lat": 37.1607,
+     "lon": -117.4805,
+     "clearance_corrected_ft": 458.9
+    },
+    {
+     "seq": 4,
+     "lat": 37.1699,
+     "lon": -117.4756,
+     "clearance_corrected_ft": 461.6
+    },
+    {
+     "seq": 5,
+     "lat": 37.179,
+     "lon": -117.4708,
+     "clearance_corrected_ft": 458.4
+    },
+    {
+     "seq": 6,
+     "lat": 37.1881,
+     "lon": -117.4659,
+     "clearance_corrected_ft": 442.8
+    },
+    {
+     "seq": 7,
+     "lat": 37.1973,
+     "lon": -117.4611,
+     "clearance_corrected_ft": 457.3
+    },
+    {
+     "seq": 8,
+     "lat": 37.2064,
+     "lon": -117.4562,
+     "clearance_corrected_ft": 466.9
+    },
+    {
+     "seq": 9,
+     "lat": 37.2156,
+     "lon": -117.4514,
+     "clearance_corrected_ft": 477.4
+    },
+    {
+     "seq": 10,
+     "lat": 37.2247,
+     "lon": -117.4466,
+     "clearance_corrected_ft": 477.9
+    },
+    {
+     "seq": 11,
+     "lat": 37.2339,
+     "lon": -117.4417,
+     "clearance_corrected_ft": 477.1
+    },
+    {
+     "seq": 12,
+     "lat": 37.243,
+     "lon": -117.4369,
+     "clearance_corrected_ft": 484.5
+    },
+    {
+     "seq": 13,
+     "lat": 37.2521,
+     "lon": -117.432,
+     "clearance_corrected_ft": 460.6
+    },
+    {
+     "seq": 14,
+     "lat": 37.2613,
+     "lon": -117.4272,
+     "clearance_corrected_ft": 396.3
+    },
+    {
+     "seq": 15,
+     "lat": 37.2704,
+     "lon": -117.4224,
+     "clearance_corrected_ft": 398.9
+    },
+    {
+     "seq": 16,
+     "lat": 37.2796,
+     "lon": -117.4175,
+     "clearance_corrected_ft": 400.1
+    },
+    {
+     "seq": 17,
+     "lat": 37.2887,
+     "lon": -117.4127,
+     "clearance_corrected_ft": 359.4
+    },
+    {
+     "seq": 18,
+     "lat": 37.2979,
+     "lon": -117.4078,
+     "clearance_corrected_ft": 350.6
+    },
+    {
+     "seq": 19,
+     "lat": 37.307,
+     "lon": -117.403,
+     "clearance_corrected_ft": 419.7
+    },
+    {
+     "seq": 20,
+     "lat": 37.3161,
+     "lon": -117.3982,
+     "clearance_corrected_ft": 406.1
+    },
+    {
+     "seq": 21,
+     "lat": 37.3253,
+     "lon": -117.3933,
+     "clearance_corrected_ft": 438.1
+    },
+    {
+     "seq": 22,
+     "lat": 37.3344,
+     "lon": -117.3885,
+     "clearance_corrected_ft": 493.3
+    },
+    {
+     "seq": 23,
+     "lat": 37.3436,
+     "lon": -117.3836,
+     "clearance_corrected_ft": 533.8
+    },
+    {
+     "seq": 24,
+     "lat": 37.3527,
+     "lon": -117.3788,
+     "clearance_corrected_ft": 508.8
+    },
+    {
+     "seq": 25,
+     "lat": 37.3619,
+     "lon": -117.374,
+     "clearance_corrected_ft": 511.2
+    },
+    {
+     "seq": 26,
+     "lat": 37.371,
+     "lon": -117.3691,
+     "clearance_corrected_ft": 483.4
+    },
+    {
+     "seq": 27,
+     "lat": 37.3801,
+     "lon": -117.3643,
+     "clearance_corrected_ft": 439.0
+    },
+    {
+     "seq": 28,
+     "lat": 37.3893,
+     "lon": -117.3594,
+     "clearance_corrected_ft": 417.8
+    },
+    {
+     "seq": 29,
+     "lat": 37.3984,
+     "lon": -117.3546,
+     "clearance_corrected_ft": 426.9
+    }
+   ]
+  },
+  {
+   "flight_id": "MOCK-0018",
+   "mean_clearance": 392.5,
+   "std_clearance": 49.9,
+   "min_clearance": 337.4,
+   "start_altitude": 3619.1,
+   "cluster": 2.0,
+   "anomaly_score": 23.333914278482908,
+   "is_anomaly": false,
+   "start_lat": 36.6821,
+   "start_lon": -116.7065,
+   "profile": [
+    {
+     "seq": 0,
+     "lat": 36.6821,
+     "lon": -116.7065,
+     "clearance_corrected_ft": 451.3
+    },
+    {
+     "seq": 1,
+     "lat": 36.6793,
+     "lon": -116.6965,
+     "clearance_corrected_ft": 446.6
+    },
+    {
+     "seq": 2,
+     "lat": 36.6766,
+     "lon": -116.6865,
+     "clearance_corrected_ft": 439.7
+    },
+    {
+     "seq": 3,
+     "lat": 36.6738,
+     "lon": -116.6766,
+     "clearance_corrected_ft": 410.2
+    },
+    {
+     "seq": 4,
+     "lat": 36.671,
+     "lon": -116.6666,
+     "clearance_corrected_ft": 359.7
+    },
+    {
+     "seq": 5,
+     "lat": 36.6683,
+     "lon": -116.6566,
+     "clearance_corrected_ft": 363.1
+    },
+    {
+     "seq": 6,
+     "lat": 36.6655,
+     "lon": -116.6466,
+     "clearance_corrected_ft": 367.9
+    },
+    {
+     "seq": 7,
+     "lat": 36.6628,
+     "lon": -116.6367,
+     "clearance_corrected_ft": 366.9
+    },
+    {
+     "seq": 8,
+     "lat": 36.66,
+     "lon": -116.6267,
+     "clearance_corrected_ft": 353.9
+    },
+    {
+     "seq": 9,
+     "lat": 36.6572,
+     "lon": -116.6167,
+     "clearance_corrected_ft": 377.7
+    },
+    {
+     "seq": 10,
+     "lat": 36.6545,
+     "lon": -116.6068,
+     "clearance_corrected_ft": 355.7
+    },
+    {
+     "seq": 11,
+     "lat": 36.6517,
+     "lon": -116.5968,
+     "clearance_corrected_ft": 340.6
+    },
+    {
+     "seq": 12,
+     "lat": 36.649,
+     "lon": -116.5868,
+     "clearance_corrected_ft": 292.9
+    },
+    {
+     "seq": 13,
+     "lat": 36.6462,
+     "lon": -116.5768,
+     "clearance_corrected_ft": 318.3
+    },
+    {
+     "seq": 14,
+     "lat": 36.6435,
+     "lon": -116.5669,
+     "clearance_corrected_ft": 341.8
+    },
+    {
+     "seq": 15,
+     "lat": 36.6407,
+     "lon": -116.5569,
+     "clearance_corrected_ft": 360.0
+    },
+    {
+     "seq": 16,
+     "lat": 36.6379,
+     "lon": -116.5469,
+     "clearance_corrected_ft": 364.9
+    },
+    {
+     "seq": 17,
+     "lat": 36.6352,
+     "lon": -116.537,
+     "clearance_corrected_ft": 406.6
+    },
+    {
+     "seq": 18,
+     "lat": 36.6324,
+     "lon": -116.527,
+     "clearance_corrected_ft": 427.0
+    },
+    {
+     "seq": 19,
+     "lat": 36.6297,
+     "lon": -116.517,
+     "clearance_corrected_ft": 358.9
+    },
+    {
+     "seq": 20,
+     "lat": 36.6269,
+     "lon": -116.5071,
+     "clearance_corrected_ft": 349.4
+    },
+    {
+     "seq": 21,
+     "lat": 36.6242,
+     "lon": -116.4971,
+     "clearance_corrected_ft": 370.7
+    },
+    {
+     "seq": 22,
+     "lat": 36.6214,
+     "lon": -116.4871,
+     "clearance_corrected_ft": 383.7
+    },
+    {
+     "seq": 23,
+     "lat": 36.6186,
+     "lon": -116.4771,
+     "clearance_corrected_ft": 401.3
+    },
+    {
+     "seq": 24,
+     "lat": 36.6159,
+     "lon": -116.4672,
+     "clearance_corrected_ft": 473.8
+    },
+    {
+     "seq": 25,
+     "lat": 36.6131,
+     "lon": -116.4572,
+     "clearance_corrected_ft": 482.0
+    },
+    {
+     "seq": 26,
+     "lat": 36.6104,
+     "lon": -116.4472,
+     "clearance_corrected_ft": 477.5
+    },
+    {
+     "seq": 27,
+     "lat": 36.6076,
+     "lon": -116.4373,
+     "clearance_corrected_ft": 479.4
+    },
+    {
+     "seq": 28,
+     "lat": 36.6049,
+     "lon": -116.4273,
+     "clearance_corrected_ft": 437.7
+    },
+    {
+     "seq": 29,
+     "lat": 36.6021,
+     "lon": -116.4173,
+     "clearance_corrected_ft": 415.8
+    }
+   ]
+  },
+  {
+   "flight_id": "MOCK-0025",
+   "mean_clearance": 424.3,
+   "std_clearance": 42.1,
+   "min_clearance": 367.6,
+   "start_altitude": 2793.5,
+   "cluster": 2.0,
+   "anomaly_score": 13.622611921198542,
+   "is_anomaly": false,
+   "start_lat": 36.8922,
+   "start_lon": -116.702,
+   "profile": [
+    {
+     "seq": 0,
+     "lat": 36.8922,
+     "lon": -116.702,
+     "clearance_corrected_ft": 513.2
+    },
+    {
+     "seq": 1,
+     "lat": 36.8992,
+     "lon": -116.7097,
+     "clearance_corrected_ft": 485.8
+    },
+    {
+     "seq": 2,
+     "lat": 36.9061,
+     "lon": -116.7174,
+     "clearance_corrected_ft": 474.3
+    },
+    {
+     "seq": 3,
+     "lat": 36.913,
+     "lon": -116.725,
+     "clearance_corrected_ft": 428.3
+    },
+    {
+     "seq": 4,
+     "lat": 36.92,
+     "lon": -116.7327,
+     "clearance_corrected_ft": 452.7
+    },
+    {
+     "seq": 5,
+     "lat": 36.9269,
+     "lon": -116.7404,
+     "clearance_corrected_ft": 440.1
+    },
+    {
+     "seq": 6,
+     "lat": 36.9339,
+     "lon": -116.7481,
+     "clearance_corrected_ft": 423.9
+    },
+    {
+     "seq": 7,
+     "lat": 36.9408,
+     "lon": -116.7557,
+     "clearance_corrected_ft": 402.1
+    },
+    {
+     "seq": 8,
+     "lat": 36.9478,
+     "lon": -116.7634,
+     "clearance_corrected_ft": 418.1
+    },
+    {
+     "seq": 9,
+     "lat": 36.9547,
+     "lon": -116.7711,
+     "clearance_corrected_ft": 374.9
+    },
+    {
+     "seq": 10,
+     "lat": 36.9616,
+     "lon": -116.7787,
+     "clearance_corrected_ft": 298.3
+    },
+    {
+     "seq": 11,
+     "lat": 36.9686,
+     "lon": -116.7864,
+     "clearance_corrected_ft": 374.3
+    },
+    {
+     "seq": 12,
+     "lat": 36.9755,
+     "lon": -116.7941,
+     "clearance_corrected_ft": 416.4
+    },
+    {
+     "seq": 13,
+     "lat": 36.9825,
+     "lon": -116.8017,
+     "clearance_corrected_ft": 421.1
+    },
+    {
+     "seq": 14,
+     "lat": 36.9894,
+     "lon": -116.8094,
+     "clearance_corrected_ft": 426.5
+    },
+    {
+     "seq": 15,
+     "lat": 36.9963,
+     "lon": -116.8171,
+     "clearance_corrected_ft": 502.7
+    },
+    {
+     "seq": 16,
+     "lat": 37.0033,
+     "lon": -116.8248,
+     "clearance_corrected_ft": 464.5
+    },
+    {
+     "seq": 17,
+     "lat": 37.0102,
+     "lon": -116.8324,
+     "clearance_corrected_ft": 482.5
+    },
+    {
+     "seq": 18,
+     "lat": 37.0172,
+     "lon": -116.8401,
+     "clearance_corrected_ft": 440.6
+    },
+    {
+     "seq": 19,
+     "lat": 37.0241,
+     "lon": -116.8478,
+     "clearance_corrected_ft": 429.3
+    },
+    {
+     "seq": 20,
+     "lat": 37.031,
+     "lon": -116.8554,
+     "clearance_corrected_ft": 404.7
+    },
+    {
+     "seq": 21,
+     "lat": 37.038,
+     "lon": -116.8631,
+     "clearance_corrected_ft": 390.9
+    },
+    {
+     "seq": 22,
+     "lat": 37.0449,
+     "lon": -116.8708,
+     "clearance_corrected_ft": 378.3
+    },
+    {
+     "seq": 23,
+     "lat": 37.0519,
+     "lon": -116.8784,
+     "clearance_corrected_ft": 413.3
+    },
+    {
+     "seq": 24,
+     "lat": 37.0588,
+     "lon": -116.8861,
+     "clearance_corrected_ft": 411.2
+    },
+    {
+     "seq": 25,
+     "lat": 37.0658,
+     "lon": -116.8938,
+     "clearance_corrected_ft": 407.3
+    },
+    {
+     "seq": 26,
+     "lat": 37.0727,
+     "lon": -116.9015,
+     "clearance_corrected_ft": 417.8
+    },
+    {
+     "seq": 27,
+     "lat": 37.0796,
+     "lon": -116.9091,
+     "clearance_corrected_ft": 424.9
+    },
+    {
+     "seq": 28,
+     "lat": 37.0866,
+     "lon": -116.9168,
+     "clearance_corrected_ft": 398.3
+    },
+    {
+     "seq": 29,
+     "lat": 37.0935,
+     "lon": -116.9245,
+     "clearance_corrected_ft": 412.7
+    }
+   ]
+  },
+  {
+   "flight_id": "MOCK-0001",
+   "mean_clearance": 468.3,
+   "std_clearance": 42.4,
+   "min_clearance": 376.9,
+   "start_altitude": 2688.3,
+   "cluster": 0.0,
+   "anomaly_score": 24.973606136483856,
+   "is_anomaly": false,
+   "start_lat": 36.6045,
+   "start_lon": -117.5949,
+   "profile": [
+    {
+     "seq": 0,
+     "lat": 36.6045,
+     "lon": -117.5949,
+     "clearance_corrected_ft": 494.4
+    },
+    {
+     "seq": 1,
+     "lat": 36.5973,
+     "lon": -117.5875,
+     "clearance_corrected_ft": 495.5
+    },
+    {
+     "seq": 2,
+     "lat": 36.5901,
+     "lon": -117.5801,
+     "clearance_corrected_ft": 500.1
+    },
+    {
+     "seq": 3,
+     "lat": 36.583,
+     "lon": -117.5726,
+     "clearance_corrected_ft": 452.7
+    },
+    {
+     "seq": 4,
+     "lat": 36.5758,
+     "lon": -117.5652,
+     "clearance_corrected_ft": 422.1
+    },
+    {
+     "seq": 5,
+     "lat": 36.5686,
+     "lon": -117.5577,
+     "clearance_corrected_ft": 412.9
+    },
+    {
+     "seq": 6,
+     "lat": 36.5614,
+     "lon": -117.5503,
+     "clearance_corrected_ft": 423.9
+    },
+    {
+     "seq": 7,
+     "lat": 36.5542,
+     "lon": -117.5429,
+     "clearance_corrected_ft": 399.6
+    },
+    {
+     "seq": 8,
+     "lat": 36.547,
+     "lon": -117.5354,
+     "clearance_corrected_ft": 413.4
+    },
+    {
+     "seq": 9,
+     "lat": 36.5398,
+     "lon": -117.528,
+     "clearance_corrected_ft": 450.7
+    },
+    {
+     "seq": 10,
+     "lat": 36.5326,
+     "lon": -117.5205,
+     "clearance_corrected_ft": 492.0
+    },
+    {
+     "seq": 11,
+     "lat": 36.5254,
+     "lon": -117.5131,
+     "clearance_corrected_ft": 471.9
+    },
+    {
+     "seq": 12,
+     "lat": 36.5183,
+     "lon": -117.5057,
+     "clearance_corrected_ft": 497.2
+    },
+    {
+     "seq": 13,
+     "lat": 36.5111,
+     "lon": -117.4982,
+     "clearance_corrected_ft": 482.2
+    },
+    {
+     "seq": 14,
+     "lat": 36.5039,
+     "lon": -117.4908,
+     "clearance_corrected_ft": 470.6
+    },
+    {
+     "seq": 15,
+     "lat": 36.4967,
+     "lon": -117.4833,
+     "clearance_corrected_ft": 437.6
+    },
+    {
+     "seq": 16,
+     "lat": 36.4895,
+     "lon": -117.4759,
+     "clearance_corrected_ft": 467.1
+    },
+    {
+     "seq": 17,
+     "lat": 36.4823,
+     "lon": -117.4685,
+     "clearance_corrected_ft": 456.5
+    },
+    {
+     "seq": 18,
+     "lat": 36.4751,
+     "lon": -117.461,
+     "clearance_corrected_ft": 459.5
+    },
+    {
+     "seq": 19,
+     "lat": 36.4679,
+     "lon": -117.4536,
+     "clearance_corrected_ft": 459.7
+    },
+    {
+     "seq": 20,
+     "lat": 36.4607,
+     "lon": -117.4462,
+     "clearance_corrected_ft": 475.8
+    },
+    {
+     "seq": 21,
+     "lat": 36.4536,
+     "lon": -117.4387,
+     "clearance_corrected_ft": 467.2
+    },
+    {
+     "seq": 22,
+     "lat": 36.4464,
+     "lon": -117.4313,
+     "clearance_corrected_ft": 435.7
+    },
+    {
+     "seq": 23,
+     "lat": 36.4392,
+     "lon": -117.4238,
+     "clearance_corrected_ft": 429.7
+    },
+    {
+     "seq": 24,
+     "lat": 36.432,
+     "lon": -117.4164,
+     "clearance_corrected_ft": 429.2
+    },
+    {
+     "seq": 25,
+     "lat": 36.4248,
+     "lon": -117.409,
+     "clearance_corrected_ft": 484.5
+    },
+    {
+     "seq": 26,
+     "lat": 36.4176,
+     "lon": -117.4015,
+     "clearance_corrected_ft": 489.6
+    },
+    {
+     "seq": 27,
+     "lat": 36.4104,
+     "lon": -117.3941,
+     "clearance_corrected_ft": 519.4
+    },
+    {
+     "seq": 28,
+     "lat": 36.4032,
+     "lon": -117.3866,
+     "clearance_corrected_ft": 554.6
+    },
+    {
+     "seq": 29,
+     "lat": 36.396,
+     "lon": -117.3792,
+     "clearance_corrected_ft": 603.5
+    }
+   ]
+  },
+  {
+   "flight_id": "MOCK-0034",
+   "mean_clearance": 147.4,
+   "std_clearance": 62.5,
+   "min_clearance": 103.6,
+   "start_altitude": 2956.8,
+   "cluster": 1.0,
+   "anomaly_score": 29.783670546962483,
+   "is_anomaly": false,
+   "start_lat": 36.7618,
+   "start_lon": -117.7519,
+   "profile": [
+    {
+     "seq": 0,
+     "lat": 36.7618,
+     "lon": -117.7519,
+     "clearance_corrected_ft": 257.2
+    },
+    {
+     "seq": 1,
+     "lat": 36.7684,
+     "lon": -117.744,
+     "clearance_corrected_ft": 258.9
+    },
+    {
+     "seq": 2,
+     "lat": 36.7751,
+     "lon": -117.736,
+     "clearance_corrected_ft": 259.1
+    },
+    {
+     "seq": 3,
+     "lat": 36.7817,
+     "lon": -117.7281,
+     "clearance_corrected_ft": 225.0
+    },
+    {
+     "seq": 4,
+     "lat": 36.7884,
+     "lon": -117.7202,
+     "clearance_corrected_ft": 196.1
+    },
+    {
+     "seq": 5,
+     "lat": 36.795,
+     "lon": -117.7122,
+     "clearance_corrected_ft": 153.3
+    },
+    {
+     "seq": 6,
+     "lat": 36.8016,
+     "lon": -117.7043,
+     "clearance_corrected_ft": 150.3
+    },
+    {
+     "seq": 7,
+     "lat": 36.8083,
+     "lon": -117.6964,
+     "clearance_corrected_ft": 150.3
+    },
+    {
+     "seq": 8,
+     "lat": 36.8149,
+     "lon": -117.6884,
+     "clearance_corrected_ft": 188.2
+    },
+    {
+     "seq": 9,
+     "lat": 36.8215,
+     "lon": -117.6805,
+     "clearance_corrected_ft": 135.9
+    },
+    {
+     "seq": 10,
+     "lat": 36.8282,
+     "lon": -117.6726,
+     "clearance_corrected_ft": 148.5
+    },
+    {
+     "seq": 11,
+     "lat": 36.8348,
+     "lon": -117.6646,
+     "clearance_corrected_ft": 122.1
+    },
+    {
+     "seq": 12,
+     "lat": 36.8415,
+     "lon": -117.6567,
+     "clearance_corrected_ft": 99.3
+    },
+    {
+     "seq": 13,
+     "lat": 36.8481,
+     "lon": -117.6488,
+     "clearance_corrected_ft": 93.4
+    },
+    {
+     "seq": 14,
+     "lat": 36.8547,
+     "lon": -117.6408,
+     "clearance_corrected_ft": 123.7
+    },
+    {
+     "seq": 15,
+     "lat": 36.8614,
+     "lon": -117.6329,
+     "clearance_corrected_ft": 63.6
+    },
+    {
+     "seq": 16,
+     "lat": 36.868,
+     "lon": -117.625,
+     "clearance_corrected_ft": 107.6
+    },
+    {
+     "seq": 17,
+     "lat": 36.8747,
+     "lon": -117.617,
+     "clearance_corrected_ft": 120.7
+    },
+    {
+     "seq": 18,
+     "lat": 36.8813,
+     "lon": -117.6091,
+     "clearance_corrected_ft": 159.2
+    },
+    {
+     "seq": 19,
+     "lat": 36.8879,
+     "lon": -117.6012,
+     "clearance_corrected_ft": 211.4
+    },
+    {
+     "seq": 20,
+     "lat": 36.8946,
+     "lon": -117.5932,
+     "clearance_corrected_ft": 263.8
+    },
+    {
+     "seq": 21,
+     "lat": 36.9012,
+     "lon": -117.5853,
+     "clearance_corrected_ft": 196.0
+    },
+    {
+     "seq": 22,
+     "lat": 36.9078,
+     "lon": -117.5774,
+     "clearance_corrected_ft": 170.2
+    },
+    {
+     "seq": 23,
+     "lat": 36.9145,
+     "lon": -117.5694,
+     "clearance_corrected_ft": 118.1
+    },
+    {
+     "seq": 24,
+     "lat": 36.9211,
+     "lon": -117.5615,
+     "clearance_corrected_ft": 62.3
+    },
+    {
+     "seq": 25,
+     "lat": 36.9278,
+     "lon": -117.5535,
+     "clearance_corrected_ft": 63.6
+    },
+    {
+     "seq": 26,
+     "lat": 36.9344,
+     "lon": -117.5456,
+     "clearance_corrected_ft": 59.1
+    },
+    {
+     "seq": 27,
+     "lat": 36.941,
+     "lon": -117.5377,
+     "clearance_corrected_ft": 86.9
+    },
+    {
+     "seq": 28,
+     "lat": 36.9477,
+     "lon": -117.5297,
+     "clearance_corrected_ft": 80.1
+    },
+    {
+     "seq": 29,
+     "lat": 36.9543,
+     "lon": -117.5218,
+     "clearance_corrected_ft": 98.0
+    }
+   ]
+  },
+  {
+   "flight_id": "MOCK-0006",
+   "mean_clearance": 371.9,
+   "std_clearance": 37.2,
+   "min_clearance": 279.7,
+   "start_altitude": 3378.4,
+   "cluster": 2.0,
+   "anomaly_score": 39.87591029960642,
+   "is_anomaly": true,
+   "start_lat": 36.4973,
+   "start_lon": -116.5931,
+   "profile": [
+    {
+     "seq": 0,
+     "lat": 36.4973,
+     "lon": -116.5931,
+     "clearance_corrected_ft": 330.3
+    },
+    {
+     "seq": 1,
+     "lat": 36.5074,
+     "lon": -116.5909,
+     "clearance_corrected_ft": 378.4
+    },
+    {
+     "seq": 2,
+     "lat": 36.5176,
+     "lon": -116.5888,
+     "clearance_corrected_ft": 415.3
+    },
+    {
+     "seq": 3,
+     "lat": 36.5277,
+     "lon": -116.5867,
+     "clearance_corrected_ft": 460.9
+    },
+    {
+     "seq": 4,
+     "lat": 36.5378,
+     "lon": -116.5845,
+     "clearance_corrected_ft": 448.6
+    },
+    {
+     "seq": 5,
+     "lat": 36.5479,
+     "lon": -116.5824,
+     "clearance_corrected_ft": 440.9
+    },
+    {
+     "seq": 6,
+     "lat": 36.5581,
+     "lon": -116.5803,
+     "clearance_corrected_ft": 402.0
+    },
+    {
+     "seq": 7,
+     "lat": 36.5682,
+     "lon": -116.5781,
+     "clearance_corrected_ft": 375.4
+    },
+    {
+     "seq": 8,
+     "lat": 36.5783,
+     "lon": -116.576,
+     "clearance_corrected_ft": 356.4
+    },
+    {
+     "seq": 9,
+     "lat": 36.5884,
+     "lon": -116.5739,
+     "clearance_corrected_ft": 371.1
+    },
+    {
+     "seq": 10,
+     "lat": 36.5986,
+     "lon": -116.5717,
+     "clearance_corrected_ft": 335.2
+    },
+    {
+     "seq": 11,
+     "lat": 36.6087,
+     "lon": -116.5696,
+     "clearance_corrected_ft": 334.7
+    },
+    {
+     "seq": 12,
+     "lat": 36.6188,
+     "lon": -116.5675,
+     "clearance_corrected_ft": 315.3
+    },
+    {
+     "seq": 13,
+     "lat": 36.6289,
+     "lon": -116.5654,
+     "clearance_corrected_ft": 313.7
+    },
+    {
+     "seq": 14,
+     "lat": 36.639,
+     "lon": -116.5632,
+     "clearance_corrected_ft": 355.5
+    },
+    {
+     "seq": 15,
+     "lat": 36.6492,
+     "lon": -116.5611,
+     "clearance_corrected_ft": 362.5
+    },
+    {
+     "seq": 16,
+     "lat": 36.6593,
+     "lon": -116.559,
+     "clearance_corrected_ft": 359.5
+    },
+    {
+     "seq": 17,
+     "lat": 36.6694,
+     "lon": -116.5568,
+     "clearance_corrected_ft": 390.4
+    },
+    {
+     "seq": 18,
+     "lat": 36.6795,
+     "lon": -116.5547,
+     "clearance_corrected_ft": 411.1
+    },
+    {
+     "seq": 19,
+     "lat": 36.6897,
+     "lon": -116.5526,
+     "clearance_corrected_ft": 346.2
+    },
+    {
+     "seq": 20,
+     "lat": 36.6998,
+     "lon": -116.5504,
+     "clearance_corrected_ft": 343.6
+    },
+    {
+     "seq": 21,
+     "lat": 36.7099,
+     "lon": -116.5483,
+     "clearance_corrected_ft": 365.7
+    },
+    {
+     "seq": 22,
+     "lat": 36.72,
+     "lon": -116.5462,
+     "clearance_corrected_ft": 360.7
+    },
+    {
+     "seq": 23,
+     "lat": 36.7302,
+     "lon": -116.544,
+     "clearance_corrected_ft": 349.5
+    },
+    {
+     "seq": 24,
+     "lat": 36.7403,
+     "lon": -116.5419,
+     "clearance_corrected_ft": 400.5
+    },
+    {
+     "seq": 25,
+     "lat": 36.7504,
+     "lon": -116.5398,
+     "clearance_corrected_ft": 391.5
+    },
+    {
+     "seq": 26,
+     "lat": 36.7605,
+     "lon": -116.5377,
+     "clearance_corrected_ft": 375.5
+    },
+    {
+     "seq": 27,
+     "lat": 36.7706,
+     "lon": -116.5355,
+     "clearance_corrected_ft": 360.4
+    },
+    {
+     "seq": 28,
+     "lat": 36.7808,
+     "lon": -116.5334,
+     "clearance_corrected_ft": 386.6
+    },
+    {
+     "seq": 29,
+     "lat": 36.7909,
+     "lon": -116.5313,
+     "clearance_corrected_ft": 319.6
+    }
+   ]
+  },
+  {
+   "flight_id": "MOCK-0012",
+   "mean_clearance": 496.7,
+   "std_clearance": 41.3,
+   "min_clearance": 419.1,
+   "start_altitude": 2511.7,
+   "cluster": 0.0,
+   "anomaly_score": 9.313137649145098,
+   "is_anomaly": false,
+   "start_lat": 36.4169,
+   "start_lon": -117.5441,
+   "profile": [
+    {
+     "seq": 0,
+     "lat": 36.4169,
+     "lon": -117.5441,
+     "clearance_corrected_ft": 531.1
+    },
+    {
+     "seq": 1,
+     "lat": 36.4176,
+     "lon": -117.5544,
+     "clearance_corrected_ft": 509.3
+    },
+    {
+     "seq": 2,
+     "lat": 36.4183,
+     "lon": -117.5648,
+     "clearance_corrected_ft": 494.7
+    },
+    {
+     "seq": 3,
+     "lat": 36.4189,
+     "lon": -117.5751,
+     "clearance_corrected_ft": 505.8
+    },
+    {
+     "seq": 4,
+     "lat": 36.4196,
+     "lon": -117.5854,
+     "clearance_corrected_ft": 457.4
+    },
+    {
+     "seq": 5,
+     "lat": 36.4203,
+     "lon": -117.5957,
+     "clearance_corrected_ft": 456.1
+    },
+    {
+     "seq": 6,
+     "lat": 36.421,
+     "lon": -117.606,
+     "clearance_corrected_ft": 441.9
+    },
+    {
+     "seq": 7,
+     "lat": 36.4217,
+     "lon": -117.6164,
+     "clearance_corrected_ft": 421.5
+    },
+    {
+     "seq": 8,
+     "lat": 36.4224,
+     "lon": -117.6267,
+     "clearance_corrected_ft": 443.6
+    },
+    {
+     "seq": 9,
+     "lat": 36.4231,
+     "lon": -117.637,
+     "clearance_corrected_ft": 484.5
+    },
+    {
+     "seq": 10,
+     "lat": 36.4238,
+     "lon": -117.6473,
+     "clearance_corrected_ft": 518.1
+    },
+    {
+     "seq": 11,
+     "lat": 36.4245,
+     "lon": -117.6576,
+     "clearance_corrected_ft": 540.3
+    },
+    {
+     "seq": 12,
+     "lat": 36.4252,
+     "lon": -117.668,
+     "clearance_corrected_ft": 525.1
+    },
+    {
+     "seq": 13,
+     "lat": 36.4259,
+     "lon": -117.6783,
+     "clearance_corrected_ft": 505.8
+    },
+    {
+     "seq": 14,
+     "lat": 36.4266,
+     "lon": -117.6886,
+     "clearance_corrected_ft": 484.7
+    },
+    {
+     "seq": 15,
+     "lat": 36.4273,
+     "lon": -117.6989,
+     "clearance_corrected_ft": 436.7
+    },
+    {
+     "seq": 16,
+     "lat": 36.428,
+     "lon": -117.7093,
+     "clearance_corrected_ft": 447.6
+    },
+    {
+     "seq": 17,
+     "lat": 36.4287,
+     "lon": -117.7196,
+     "clearance_corrected_ft": 462.8
+    },
+    {
+     "seq": 18,
+     "lat": 36.4294,
+     "lon": -117.7299,
+     "clearance_corrected_ft": 441.9
+    },
+    {
+     "seq": 19,
+     "lat": 36.4301,
+     "lon": -117.7402,
+     "clearance_corrected_ft": 469.6
+    },
+    {
+     "seq": 20,
+     "lat": 36.4308,
+     "lon": -117.7505,
+     "clearance_corrected_ft": 488.5
+    },
+    {
+     "seq": 21,
+     "lat": 36.4314,
+     "lon": -117.7609,
+     "clearance_corrected_ft": 487.2
+    },
+    {
+     "seq": 22,
+     "lat": 36.4321,
+     "lon": -117.7712,
+     "clearance_corrected_ft": 500.0
+    },
+    {
+     "seq": 23,
+     "lat": 36.4328,
+     "lon": -117.7815,
+     "clearance_corrected_ft": 544.7
+    },
+    {
+     "seq": 24,
+     "lat": 36.4335,
+     "lon": -117.7918,
+     "clearance_corrected_ft": 533.4
+    },
+    {
+     "seq": 25,
+     "lat": 36.4342,
+     "lon": -117.8021,
+     "clearance_corrected_ft": 556.5
+    },
+    {
+     "seq": 26,
+     "lat": 36.4349,
+     "lon": -117.8125,
+     "clearance_corrected_ft": 557.7
+    },
+    {
+     "seq": 27,
+     "lat": 36.4356,
+     "lon": -117.8228,
+     "clearance_corrected_ft": 562.6
+    },
+    {
+     "seq": 28,
+     "lat": 36.4363,
+     "lon": -117.8331,
+     "clearance_corrected_ft": 558.8
+    },
+    {
+     "seq": 29,
+     "lat": 36.437,
+     "lon": -117.8434,
+     "clearance_corrected_ft": 533.2
+    }
+   ]
+  },
+  {
+   "flight_id": "MOCK-0002",
+   "mean_clearance": 387.6,
+   "std_clearance": 40.4,
+   "min_clearance": 324.1,
+   "start_altitude": 3289.6,
+   "cluster": 2.0,
+   "anomaly_score": 24.447840168179805,
+   "is_anomaly": false,
+   "start_lat": 36.0064,
+   "start_lon": -117.9471,
+   "profile": [
+    {
+     "seq": 0,
+     "lat": 36.0064,
+     "lon": -117.9471,
+     "clearance_corrected_ft": 375.8
+    },
+    {
+     "seq": 1,
+     "lat": 35.9966,
+     "lon": -117.9503,
+     "clearance_corrected_ft": 395.6
+    },
+    {
+     "seq": 2,
+     "lat": 35.9868,
+     "lon": -117.9535,
+     "clearance_corrected_ft": 363.9
+    },
+    {
+     "seq": 3,
+     "lat": 35.9769,
+     "lon": -117.9567,
+     "clearance_corrected_ft": 348.7
+    },
+    {
+     "seq": 4,
+     "lat": 35.9671,
+     "lon": -117.9599,
+     "clearance_corrected_ft": 372.7
+    },
+    {
+     "seq": 5,
+     "lat": 35.9572,
+     "lon": -117.9631,
+     "clearance_corrected_ft": 392.4
+    },
+    {
+     "seq": 6,
+     "lat": 35.9474,
+     "lon": -117.9663,
+     "clearance_corrected_ft": 407.8
+    },
+    {
+     "seq": 7,
+     "lat": 35.9376,
+     "lon": -117.9695,
+     "clearance_corrected_ft": 396.1
+    },
+    {
+     "seq": 8,
+     "lat": 35.9277,
+     "lon": -117.9727,
+     "clearance_corrected_ft": 408.6
+    },
+    {
+     "seq": 9,
+     "lat": 35.9179,
+     "lon": -117.9759,
+     "clearance_corrected_ft": 424.9
+    },
+    {
+     "seq": 10,
+     "lat": 35.9081,
+     "lon": -117.9791,
+     "clearance_corrected_ft": 484.1
+    },
+    {
+     "seq": 11,
+     "lat": 35.8982,
+     "lon": -117.9823,
+     "clearance_corrected_ft": 455.4
+    },
+    {
+     "seq": 12,
+     "lat": 35.8884,
+     "lon": -117.9855,
+     "clearance_corrected_ft": 460.2
+    },
+    {
+     "seq": 13,
+     "lat": 35.8785,
+     "lon": -117.9887,
+     "clearance_corrected_ft": 445.4
+    },
+    {
+     "seq": 14,
+     "lat": 35.8687,
+     "lon": -117.9919,
+     "clearance_corrected_ft": 441.8
+    },
+    {
+     "seq": 15,
+     "lat": 35.8589,
+     "lon": -117.9951,
+     "clearance_corrected_ft": 373.3
+    },
+    {
+     "seq": 16,
+     "lat": 35.849,
+     "lon": -117.9983,
+     "clearance_corrected_ft": 382.9
+    },
+    {
+     "seq": 17,
+     "lat": 35.8392,
+     "lon": -118.0015,
+     "clearance_corrected_ft": 391.0
+    },
+    {
+     "seq": 18,
+     "lat": 35.8294,
+     "lon": -118.0047,
+     "clearance_corrected_ft": 388.4
+    },
+    {
+     "seq": 19,
+     "lat": 35.8195,
+     "lon": -118.0079,
+     "clearance_corrected_ft": 356.3
+    },
+    {
+     "seq": 20,
+     "lat": 35.8097,
+     "lon": -118.0112,
+     "clearance_corrected_ft": 368.7
+    },
+    {
+     "seq": 21,
+     "lat": 35.7998,
+     "lon": -118.0144,
+     "clearance_corrected_ft": 338.9
+    },
+    {
+     "seq": 22,
+     "lat": 35.79,
+     "lon": -118.0176,
+     "clearance_corrected_ft": 312.8
+    },
+    {
+     "seq": 23,
+     "lat": 35.7802,
+     "lon": -118.0208,
+     "clearance_corrected_ft": 323.3
+    },
+    {
+     "seq": 24,
+     "lat": 35.7703,
+     "lon": -118.024,
+     "clearance_corrected_ft": 343.6
+    },
+    {
+     "seq": 25,
+     "lat": 35.7605,
+     "lon": -118.0272,
+     "clearance_corrected_ft": 349.0
+    },
+    {
+     "seq": 26,
+     "lat": 35.7507,
+     "lon": -118.0304,
+     "clearance_corrected_ft": 355.0
+    },
+    {
+     "seq": 27,
+     "lat": 35.7408,
+     "lon": -118.0336,
+     "clearance_corrected_ft": 373.1
+    },
+    {
+     "seq": 28,
+     "lat": 35.731,
+     "lon": -118.0368,
+     "clearance_corrected_ft": 395.4
+    },
+    {
+     "seq": 29,
+     "lat": 35.7211,
+     "lon": -118.04,
+     "clearance_corrected_ft": 402.9
+    }
+   ]
+  },
+  {
+   "flight_id": "MOCK-0030",
+   "mean_clearance": 475.8,
+   "std_clearance": 33.1,
+   "min_clearance": 439.0,
+   "start_altitude": 3278.5,
+   "cluster": 0.0,
+   "anomaly_score": 15.834172016881814,
+   "is_anomaly": false,
+   "start_lat": 37.4283,
+   "start_lon": -116.7743,
+   "profile": [
+    {
+     "seq": 0,
+     "lat": 37.4283,
+     "lon": -116.7743,
+     "clearance_corrected_ft": 428.1
+    },
+    {
+     "seq": 1,
+     "lat": 37.4218,
+     "lon": -116.7823,
+     "clearance_corrected_ft": 462.0
+    },
+    {
+     "seq": 2,
+     "lat": 37.4152,
+     "lon": -116.7903,
+     "clearance_corrected_ft": 475.4
+    },
+    {
+     "seq": 3,
+     "lat": 37.4087,
+     "lon": -116.7983,
+     "clearance_corrected_ft": 509.3
+    },
+    {
+     "seq": 4,
+     "lat": 37.4021,
+     "lon": -116.8063,
+     "clearance_corrected_ft": 469.4
+    },
+    {
+     "seq": 5,
+     "lat": 37.3956,
+     "lon": -116.8143,
+     "clearance_corrected_ft": 462.0
+    },
+    {
+     "seq": 6,
+     "lat": 37.389,
+     "lon": -116.8223,
+     "clearance_corrected_ft": 487.9
+    },
+    {
+     "seq": 7,
+     "lat": 37.3824,
+     "lon": -116.8303,
+     "clearance_corrected_ft": 512.1
+    },
+    {
+     "seq": 8,
+     "lat": 37.3759,
+     "lon": -116.8383,
+     "clearance_corrected_ft": 484.1
+    },
+    {
+     "seq": 9,
+     "lat": 37.3693,
+     "lon": -116.8463,
+     "clearance_corrected_ft": 494.2
+    },
+    {
+     "seq": 10,
+     "lat": 37.3628,
+     "lon": -116.8543,
+     "clearance_corrected_ft": 503.6
+    },
+    {
+     "seq": 11,
+     "lat": 37.3562,
+     "lon": -116.8623,
+     "clearance_corrected_ft": 478.7
+    },
+    {
+     "seq": 12,
+     "lat": 37.3497,
+     "lon": -116.8703,
+     "clearance_corrected_ft": 454.3
+    },
+    {
+     "seq": 13,
+     "lat": 37.3431,
+     "lon": -116.8783,
+     "clearance_corrected_ft": 430.1
+    },
+    {
+     "seq": 14,
+     "lat": 37.3365,
+     "lon": -116.8863,
+     "clearance_corrected_ft": 426.3
+    },
+    {
+     "seq": 15,
+     "lat": 37.33,
+     "lon": -116.8943,
+     "clearance_corrected_ft": 420.3
+    },
+    {
+     "seq": 16,
+     "lat": 37.3234,
+     "lon": -116.9023,
+     "clearance_corrected_ft": 398.8
+    },
+    {
+     "seq": 17,
+     "lat": 37.3169,
+     "lon": -116.9103,
+     "clearance_corrected_ft": 434.0
+    },
+    {
+     "seq": 18,
+     "lat": 37.3103,
+     "lon": -116.9183,
+     "clearance_corrected_ft": 474.1
+    },
+    {
+     "seq": 19,
+     "lat": 37.3038,
+     "lon": -116.9263,
+     "clearance_corrected_ft": 495.4
+    },
+    {
+     "seq": 20,
+     "lat": 37.2972,
+     "lon": -116.9343,
+     "clearance_corrected_ft": 473.6
+    },
+    {
+     "seq": 21,
+     "lat": 37.2906,
+     "lon": -116.9423,
+     "clearance_corrected_ft": 488.4
+    },
+    {
+     "seq": 22,
+     "lat": 37.2841,
+     "lon": -116.9503,
+     "clearance_corrected_ft": 503.6
+    },
+    {
+     "seq": 23,
+     "lat": 37.2775,
+     "lon": -116.9583,
+     "clearance_corrected_ft": 512.4
+    },
+    {
+     "seq": 24,
+     "lat": 37.271,
+     "lon": -116.9663,
+     "clearance_corrected_ft": 501.6
+    },
+    {
+     "seq": 25,
+     "lat": 37.2644,
+     "lon": -116.9743,
+     "clearance_corrected_ft": 526.0
+    },
+    {
+     "seq": 26,
+     "lat": 37.2579,
+     "lon": -116.9823,
+     "clearance_corrected_ft": 543.9
+    },
+    {
+     "seq": 27,
+     "lat": 37.2513,
+     "lon": -116.9903,
+     "clearance_corrected_ft": 485.0
+    },
+    {
+     "seq": 28,
+     "lat": 37.2447,
+     "lon": -116.9983,
+     "clearance_corrected_ft": 467.8
+    },
+    {
+     "seq": 29,
+     "lat": 37.2382,
+     "lon": -117.0063,
+     "clearance_corrected_ft": 471.8
+    }
+   ]
+  },
+  {
+   "flight_id": "MOCK-0022",
+   "mean_clearance": 409.1,
+   "std_clearance": 31.7,
+   "min_clearance": 296.7,
+   "start_altitude": 2705.2,
+   "cluster": 2.0,
+   "anomaly_score": 5.711003025352797,
+   "is_anomaly": false,
+   "start_lat": 36.7669,
+   "start_lon": -117.2438,
+   "profile": [
+    {
+     "seq": 0,
+     "lat": 36.7669,
+     "lon": -117.2438,
+     "clearance_corrected_ft": 370.6
+    },
+    {
+     "seq": 1,
+     "lat": 36.7574,
+     "lon": -117.2398,
+     "clearance_corrected_ft": 388.7
+    },
+    {
+     "seq": 2,
+     "lat": 36.7479,
+     "lon": -117.2357,
+     "clearance_corrected_ft": 371.7
+    },
+    {
+     "seq": 3,
+     "lat": 36.7384,
+     "lon": -117.2316,
+     "clearance_corrected_ft": 370.0
+    },
+    {
+     "seq": 4,
+     "lat": 36.7289,
+     "lon": -117.2275,
+     "clearance_corrected_ft": 398.2
+    },
+    {
+     "seq": 5,
+     "lat": 36.7194,
+     "lon": -117.2234,
+     "clearance_corrected_ft": 381.8
+    },
+    {
+     "seq": 6,
+     "lat": 36.7099,
+     "lon": -117.2193,
+     "clearance_corrected_ft": 371.0
+    },
+    {
+     "seq": 7,
+     "lat": 36.7004,
+     "lon": -117.2152,
+     "clearance_corrected_ft": 369.5
+    },
+    {
+     "seq": 8,
+     "lat": 36.6909,
+     "lon": -117.2112,
+     "clearance_corrected_ft": 391.0
+    },
+    {
+     "seq": 9,
+     "lat": 36.6813,
+     "lon": -117.2071,
+     "clearance_corrected_ft": 416.7
+    },
+    {
+     "seq": 10,
+     "lat": 36.6718,
+     "lon": -117.203,
+     "clearance_corrected_ft": 464.9
+    },
+    {
+     "seq": 11,
+     "lat": 36.6623,
+     "lon": -117.1989,
+     "clearance_corrected_ft": 458.7
+    },
+    {
+     "seq": 12,
+     "lat": 36.6528,
+     "lon": -117.1948,
+     "clearance_corrected_ft": 486.8
+    },
+    {
+     "seq": 13,
+     "lat": 36.6433,
+     "lon": -117.1907,
+     "clearance_corrected_ft": 470.9
+    },
+    {
+     "seq": 14,
+     "lat": 36.6338,
+     "lon": -117.1866,
+     "clearance_corrected_ft": 436.5
+    },
+    {
+     "seq": 15,
+     "lat": 36.6243,
+     "lon": -117.1826,
+     "clearance_corrected_ft": 429.1
+    },
+    {
+     "seq": 16,
+     "lat": 36.6148,
+     "lon": -117.1785,
+     "clearance_corrected_ft": 411.9
+    },
+    {
+     "seq": 17,
+     "lat": 36.6053,
+     "lon": -117.1744,
+     "clearance_corrected_ft": 416.8
+    },
+    {
+     "seq": 18,
+     "lat": 36.5958,
+     "lon": -117.1703,
+     "clearance_corrected_ft": 414.2
+    },
+    {
+     "seq": 19,
+     "lat": 36.5863,
+     "lon": -117.1662,
+     "clearance_corrected_ft": 434.5
+    },
+    {
+     "seq": 20,
+     "lat": 36.5768,
+     "lon": -117.1621,
+     "clearance_corrected_ft": 413.3
+    },
+    {
+     "seq": 21,
+     "lat": 36.5673,
+     "lon": -117.1581,
+     "clearance_corrected_ft": 423.4
+    },
+    {
+     "seq": 22,
+     "lat": 36.5578,
+     "lon": -117.154,
+     "clearance_corrected_ft": 411.3
+    },
+    {
+     "seq": 23,
+     "lat": 36.5483,
+     "lon": -117.1499,
+     "clearance_corrected_ft": 423.5
+    },
+    {
+     "seq": 24,
+     "lat": 36.5388,
+     "lon": -117.1458,
+     "clearance_corrected_ft": 402.1
+    },
+    {
+     "seq": 25,
+     "lat": 36.5293,
+     "lon": -117.1417,
+     "clearance_corrected_ft": 406.8
+    },
+    {
+     "seq": 26,
+     "lat": 36.5198,
+     "lon": -117.1376,
+     "clearance_corrected_ft": 409.1
+    },
+    {
+     "seq": 27,
+     "lat": 36.5103,
+     "lon": -117.1335,
+     "clearance_corrected_ft": 371.5
+    },
+    {
+     "seq": 28,
+     "lat": 36.5008,
+     "lon": -117.1295,
+     "clearance_corrected_ft": 374.1
+    },
+    {
+     "seq": 29,
+     "lat": 36.4913,
+     "lon": -117.1254,
+     "clearance_corrected_ft": 384.4
+    }
+   ]
+  },
+  {
+   "flight_id": "MOCK-0003",
+   "mean_clearance": 495.0,
+   "std_clearance": 28.3,
+   "min_clearance": 424.1,
+   "start_altitude": 3310.0,
+   "cluster": 0.0,
+   "anomaly_score": 6.186974262033077,
+   "is_anomaly": false,
+   "start_lat": 36.431,
+   "start_lon": -116.9201,
+   "profile": [
+    {
+     "seq": 0,
+     "lat": 36.431,
+     "lon": -116.9201,
+     "clearance_corrected_ft": 462.4
+    },
+    {
+     "seq": 1,
+     "lat": 36.4258,
+     "lon": -116.9111,
+     "clearance_corrected_ft": 487.2
+    },
+    {
+     "seq": 2,
+     "lat": 36.4205,
+     "lon": -116.9022,
+     "clearance_corrected_ft": 488.3
+    },
+    {
+     "seq": 3,
+     "lat": 36.4153,
+     "lon": -116.8932,
+     "clearance_corrected_ft": 474.5
+    },
+    {
+     "seq": 4,
+     "lat": 36.4101,
+     "lon": -116.8843,
+     "clearance_corrected_ft": 475.6
+    },
+    {
+     "seq": 5,
+     "lat": 36.4049,
+     "lon": -116.8754,
+     "clearance_corrected_ft": 495.0
+    },
+    {
+     "seq": 6,
+     "lat": 36.3997,
+     "lon": -116.8664,
+     "clearance_corrected_ft": 457.5
+    },
+    {
+     "seq": 7,
+     "lat": 36.3945,
+     "lon": -116.8575,
+     "clearance_corrected_ft": 461.7
+    },
+    {
+     "seq": 8,
+     "lat": 36.3893,
+     "lon": -116.8486,
+     "clearance_corrected_ft": 492.3
+    },
+    {
+     "seq": 9,
+     "lat": 36.3841,
+     "lon": -116.8396,
+     "clearance_corrected_ft": 491.3
+    },
+    {
+     "seq": 10,
+     "lat": 36.3789,
+     "lon": -116.8307,
+     "clearance_corrected_ft": 486.3
+    },
+    {
+     "seq": 11,
+     "lat": 36.3736,
+     "lon": -116.8217,
+     "clearance_corrected_ft": 512.0
+    },
+    {
+     "seq": 12,
+     "lat": 36.3684,
+     "lon": -116.8128,
+     "clearance_corrected_ft": 528.1
+    },
+    {
+     "seq": 13,
+     "lat": 36.3632,
+     "lon": -116.8039,
+     "clearance_corrected_ft": 504.4
+    },
+    {
+     "seq": 14,
+     "lat": 36.358,
+     "lon": -116.7949,
+     "clearance_corrected_ft": 491.8
+    },
+    {
+     "seq": 15,
+     "lat": 36.3528,
+     "lon": -116.786,
+     "clearance_corrected_ft": 497.8
+    },
+    {
+     "seq": 16,
+     "lat": 36.3476,
+     "lon": -116.7771,
+     "clearance_corrected_ft": 483.6
+    },
+    {
+     "seq": 17,
+     "lat": 36.3424,
+     "lon": -116.7681,
+     "clearance_corrected_ft": 465.5
+    },
+    {
+     "seq": 18,
+     "lat": 36.3372,
+     "lon": -116.7592,
+     "clearance_corrected_ft": 476.2
+    },
+    {
+     "seq": 19,
+     "lat": 36.332,
+     "lon": -116.7503,
+     "clearance_corrected_ft": 471.3
+    },
+    {
+     "seq": 20,
+     "lat": 36.3268,
+     "lon": -116.7413,
+     "clearance_corrected_ft": 463.2
+    },
+    {
+     "seq": 21,
+     "lat": 36.3215,
+     "lon": -116.7324,
+     "clearance_corrected_ft": 464.9
+    },
+    {
+     "seq": 22,
+     "lat": 36.3163,
+     "lon": -116.7234,
+     "clearance_corrected_ft": 489.1
+    },
+    {
+     "seq": 23,
+     "lat": 36.3111,
+     "lon": -116.7145,
+     "clearance_corrected_ft": 491.3
+    },
+    {
+     "seq": 24,
+     "lat": 36.3059,
+     "lon": -116.7056,
+     "clearance_corrected_ft": 504.1
+    },
+    {
+     "seq": 25,
+     "lat": 36.3007,
+     "lon": -116.6966,
+     "clearance_corrected_ft": 530.7
+    },
+    {
+     "seq": 26,
+     "lat": 36.2955,
+     "lon": -116.6877,
+     "clearance_corrected_ft": 546.0
+    },
+    {
+     "seq": 27,
+     "lat": 36.2903,
+     "lon": -116.6788,
+     "clearance_corrected_ft": 563.4
+    },
+    {
+     "seq": 28,
+     "lat": 36.2851,
+     "lon": -116.6698,
+     "clearance_corrected_ft": 547.8
+    },
+    {
+     "seq": 29,
+     "lat": 36.2799,
+     "lon": -116.6609,
+     "clearance_corrected_ft": 546.6
+    }
+   ]
+  },
+  {
+   "flight_id": "MOCK-0031",
+   "mean_clearance": 578.5,
+   "std_clearance": 22.2,
+   "min_clearance": 487.6,
+   "start_altitude": 3120.7,
+   "cluster": 0.0,
+   "anomaly_score": 87.60093239458968,
+   "is_anomaly": true,
+   "start_lat": 36.875,
+   "start_lon": -117.3666,
+   "profile": [
+    {
+     "seq": 0,
+     "lat": 36.875,
+     "lon": -117.3666,
+     "clearance_corrected_ft": 569.0
+    },
+    {
+     "seq": 1,
+     "lat": 36.8657,
+     "lon": -117.3621,
+     "clearance_corrected_ft": 591.8
+    },
+    {
+     "seq": 2,
+     "lat": 36.8563,
+     "lon": -117.3577,
+     "clearance_corrected_ft": 609.1
+    },
+    {
+     "seq": 3,
+     "lat": 36.847,
+     "lon": -117.3532,
+     "clearance_corrected_ft": 608.9
+    },
+    {
+     "seq": 4,
+     "lat": 36.8376,
+     "lon": -117.3488,
+     "clearance_corrected_ft": 598.4
+    },
+    {
+     "seq": 5,
+     "lat": 36.8283,
+     "lon": -117.3443,
+     "clearance_corrected_ft": 601.9
+    },
+    {
+     "seq": 6,
+     "lat": 36.819,
+     "lon": -117.3399,
+     "clearance_corrected_ft": 575.4
+    },
+    {
+     "seq": 7,
+     "lat": 36.8096,
+     "lon": -117.3354,
+     "clearance_corrected_ft": 577.6
+    },
+    {
+     "seq": 8,
+     "lat": 36.8003,
+     "lon": -117.331,
+     "clearance_corrected_ft": 557.1
+    },
+    {
+     "seq": 9,
+     "lat": 36.7909,
+     "lon": -117.3265,
+     "clearance_corrected_ft": 569.7
+    },
+    {
+     "seq": 10,
+     "lat": 36.7816,
+     "lon": -117.3221,
+     "clearance_corrected_ft": 554.5
+    },
+    {
+     "seq": 11,
+     "lat": 36.7723,
+     "lon": -117.3176,
+     "clearance_corrected_ft": 571.1
+    },
+    {
+     "seq": 12,
+     "lat": 36.7629,
+     "lon": -117.3132,
+     "clearance_corrected_ft": 567.9
+    },
+    {
+     "seq": 13,
+     "lat": 36.7536,
+     "lon": -117.3087,
+     "clearance_corrected_ft": 569.4
+    },
+    {
+     "seq": 14,
+     "lat": 36.7442,
+     "lon": -117.3043,
+     "clearance_corrected_ft": 546.8
+    },
+    {
+     "seq": 15,
+     "lat": 36.7349,
+     "lon": -117.2998,
+     "clearance_corrected_ft": 530.6
+    },
+    {
+     "seq": 16,
+     "lat": 36.7256,
+     "lon": -117.2954,
+     "clearance_corrected_ft": 541.0
+    },
+    {
+     "seq": 17,
+     "lat": 36.7162,
+     "lon": -117.2909,
+     "clearance_corrected_ft": 542.5
+    },
+    {
+     "seq": 18,
+     "lat": 36.7069,
+     "lon": -117.2865,
+     "clearance_corrected_ft": 565.9
+    },
+    {
+     "seq": 19,
+     "lat": 36.6976,
+     "lon": -117.282,
+     "clearance_corrected_ft": 575.2
+    },
+    {
+     "seq": 20,
+     "lat": 36.6882,
+     "lon": -117.2776,
+     "clearance_corrected_ft": 606.9
+    },
+    {
+     "seq": 21,
+     "lat": 36.6789,
+     "lon": -117.2731,
+     "clearance_corrected_ft": 607.5
+    },
+    {
+     "seq": 22,
+     "lat": 36.6695,
+     "lon": -117.2687,
+     "clearance_corrected_ft": 600.3
+    },
+    {
+     "seq": 23,
+     "lat": 36.6602,
+     "lon": -117.2642,
+     "clearance_corrected_ft": 594.9
+    },
+    {
+     "seq": 24,
+     "lat": 36.6509,
+     "lon": -117.2598,
+     "clearance_corrected_ft": 609.4
+    },
+    {
+     "seq": 25,
+     "lat": 36.6415,
+     "lon": -117.2553,
+     "clearance_corrected_ft": 592.6
+    },
+    {
+     "seq": 26,
+     "lat": 36.6322,
+     "lon": -117.2509,
+     "clearance_corrected_ft": 589.4
+    },
+    {
+     "seq": 27,
+     "lat": 36.6228,
+     "lon": -117.2464,
+     "clearance_corrected_ft": 588.6
+    },
+    {
+     "seq": 28,
+     "lat": 36.6135,
+     "lon": -117.242,
+     "clearance_corrected_ft": 582.6
+    },
+    {
+     "seq": 29,
+     "lat": 36.6042,
+     "lon": -117.2375,
+     "clearance_corrected_ft": 558.9
+    }
+   ]
+  },
+  {
+   "flight_id": "MOCK-0037",
+   "mean_clearance": 175.4,
+   "std_clearance": 48.6,
+   "min_clearance": 89.6,
+   "start_altitude": 3265.1,
+   "cluster": 1.0,
+   "anomaly_score": 7.348607436106893,
+   "is_anomaly": false,
+   "start_lat": 36.6424,
+   "start_lon": -116.7042,
+   "profile": [
+    {
+     "seq": 0,
+     "lat": 36.6424,
+     "lon": -116.7042,
+     "clearance_corrected_ft": 221.1
+    },
+    {
+     "seq": 1,
+     "lat": 36.6345,
+     "lon": -116.6976,
+     "clearance_corrected_ft": 240.1
+    },
+    {
+     "seq": 2,
+     "lat": 36.6265,
+     "lon": -116.691,
+     "clearance_corrected_ft": 262.6
+    },
+    {
+     "seq": 3,
+     "lat": 36.6185,
+     "lon": -116.6844,
+     "clearance_corrected_ft": 271.6
+    },
+    {
+     "seq": 4,
+     "lat": 36.6105,
+     "lon": -116.6778,
+     "clearance_corrected_ft": 267.7
+    },
+    {
+     "seq": 5,
+     "lat": 36.6026,
+     "lon": -116.6712,
+     "clearance_corrected_ft": 229.7
+    },
+    {
+     "seq": 6,
+     "lat": 36.5946,
+     "lon": -116.6647,
+     "clearance_corrected_ft": 230.7
+    },
+    {
+     "seq": 7,
+     "lat": 36.5866,
+     "lon": -116.6581,
+     "clearance_corrected_ft": 203.5
+    },
+    {
+     "seq": 8,
+     "lat": 36.5787,
+     "lon": -116.6515,
+     "clearance_corrected_ft": 189.1
+    },
+    {
+     "seq": 9,
+     "lat": 36.5707,
+     "lon": -116.6449,
+     "clearance_corrected_ft": 195.1
+    },
+    {
+     "seq": 10,
+     "lat": 36.5627,
+     "lon": -116.6383,
+     "clearance_corrected_ft": 172.5
+    },
+    {
+     "seq": 11,
+     "lat": 36.5547,
+     "lon": -116.6317,
+     "clearance_corrected_ft": 162.0
+    },
+    {
+     "seq": 12,
+     "lat": 36.5468,
+     "lon": -116.6251,
+     "clearance_corrected_ft": 125.9
+    },
+    {
+     "seq": 13,
+     "lat": 36.5388,
+     "lon": -116.6185,
+     "clearance_corrected_ft": 131.0
+    },
+    {
+     "seq": 14,
+     "lat": 36.5308,
+     "lon": -116.6119,
+     "clearance_corrected_ft": 124.0
+    },
+    {
+     "seq": 15,
+     "lat": 36.5228,
+     "lon": -116.6053,
+     "clearance_corrected_ft": 141.3
+    },
+    {
+     "seq": 16,
+     "lat": 36.5149,
+     "lon": -116.5987,
+     "clearance_corrected_ft": 141.4
+    },
+    {
+     "seq": 17,
+     "lat": 36.5069,
+     "lon": -116.5921,
+     "clearance_corrected_ft": 180.9
+    },
+    {
+     "seq": 18,
+     "lat": 36.4989,
+     "lon": -116.5856,
+     "clearance_corrected_ft": 152.3
+    },
+    {
+     "seq": 19,
+     "lat": 36.491,
+     "lon": -116.579,
+     "clearance_corrected_ft": 136.1
+    },
+    {
+     "seq": 20,
+     "lat": 36.483,
+     "lon": -116.5724,
+     "clearance_corrected_ft": 130.5
+    },
+    {
+     "seq": 21,
+     "lat": 36.475,
+     "lon": -116.5658,
+     "clearance_corrected_ft": 101.7
+    },
+    {
+     "seq": 22,
+     "lat": 36.467,
+     "lon": -116.5592,
+     "clearance_corrected_ft": 82.0
+    },
+    {
+     "seq": 23,
+     "lat": 36.4591,
+     "lon": -116.5526,
+     "clearance_corrected_ft": 129.9
+    },
+    {
+     "seq": 24,
+     "lat": 36.4511,
+     "lon": -116.546,
+     "clearance_corrected_ft": 140.9
+    },
+    {
+     "seq": 25,
+     "lat": 36.4431,
+     "lon": -116.5394,
+     "clearance_corrected_ft": 168.1
+    },
+    {
+     "seq": 26,
+     "lat": 36.4351,
+     "lon": -116.5328,
+     "clearance_corrected_ft": 178.7
+    },
+    {
+     "seq": 27,
+     "lat": 36.4272,
+     "lon": -116.5262,
+     "clearance_corrected_ft": 198.8
+    },
+    {
+     "seq": 28,
+     "lat": 36.4192,
+     "lon": -116.5196,
+     "clearance_corrected_ft": 168.5
+    },
+    {
+     "seq": 29,
+     "lat": 36.4112,
+     "lon": -116.513,
+     "clearance_corrected_ft": 184.3
+    }
+   ]
+  },
+  {
+   "flight_id": "MOCK-0004",
+   "mean_clearance": 506.4,
+   "std_clearance": 37.3,
+   "min_clearance": 436.0,
+   "start_altitude": 3879.6,
+   "cluster": 0.0,
+   "anomaly_score": 15.254501859766314,
+   "is_anomaly": false,
+   "start_lat": 36.4571,
+   "start_lon": -117.0967,
+   "profile": [
+    {
+     "seq": 0,
+     "lat": 36.4571,
+     "lon": -117.0967,
+     "clearance_corrected_ft": 526.1
+    },
+    {
+     "seq": 1,
+     "lat": 36.4616,
+     "lon": -117.106,
+     "clearance_corrected_ft": 523.0
+    },
+    {
+     "seq": 2,
+     "lat": 36.4661,
+     "lon": -117.1153,
+     "clearance_corrected_ft": 572.9
+    },
+    {
+     "seq": 3,
+     "lat": 36.4707,
+     "lon": -117.1246,
+     "clearance_corrected_ft": 525.7
+    },
+    {
+     "seq": 4,
+     "lat": 36.4752,
+     "lon": -117.1339,
+     "clearance_corrected_ft": 524.8
+    },
+    {
+     "seq": 5,
+     "lat": 36.4798,
+     "lon": -117.1432,
+     "clearance_corrected_ft": 525.7
+    },
+    {
+     "seq": 6,
+     "lat": 36.4843,
+     "lon": -117.1524,
+     "clearance_corrected_ft": 520.0
+    },
+    {
+     "seq": 7,
+     "lat": 36.4889,
+     "lon": -117.1617,
+     "clearance_corrected_ft": 473.4
+    },
+    {
+     "seq": 8,
+     "lat": 36.4934,
+     "lon": -117.171,
+     "clearance_corrected_ft": 505.0
+    },
+    {
+     "seq": 9,
+     "lat": 36.4979,
+     "lon": -117.1803,
+     "clearance_corrected_ft": 485.1
+    },
+    {
+     "seq": 10,
+     "lat": 36.5025,
+     "lon": -117.1896,
+     "clearance_corrected_ft": 471.0
+    },
+    {
+     "seq": 11,
+     "lat": 36.507,
+     "lon": -117.1989,
+     "clearance_corrected_ft": 522.4
+    },
+    {
+     "seq": 12,
+     "lat": 36.5116,
+     "lon": -117.2082,
+     "clearance_corrected_ft": 558.1
+    },
+    {
+     "seq": 13,
+     "lat": 36.5161,
+     "lon": -117.2175,
+     "clearance_corrected_ft": 542.6
+    },
+    {
+     "seq": 14,
+     "lat": 36.5207,
+     "lon": -117.2268,
+     "clearance_corrected_ft": 551.9
+    },
+    {
+     "seq": 15,
+     "lat": 36.5252,
+     "lon": -117.2361,
+     "clearance_corrected_ft": 542.2
+    },
+    {
+     "seq": 16,
+     "lat": 36.5297,
+     "lon": -117.2454,
+     "clearance_corrected_ft": 515.8
+    },
+    {
+     "seq": 17,
+     "lat": 36.5343,
+     "lon": -117.2547,
+     "clearance_corrected_ft": 479.6
+    },
+    {
+     "seq": 18,
+     "lat": 36.5388,
+     "lon": -117.264,
+     "clearance_corrected_ft": 487.3
+    },
+    {
+     "seq": 19,
+     "lat": 36.5434,
+     "lon": -117.2733,
+     "clearance_corrected_ft": 519.7
+    },
+    {
+     "seq": 20,
+     "lat": 36.5479,
+     "lon": -117.2826,
+     "clearance_corrected_ft": 543.0
+    },
+    {
+     "seq": 21,
+     "lat": 36.5525,
+     "lon": -117.2919,
+     "clearance_corrected_ft": 517.7
+    },
+    {
+     "seq": 22,
+     "lat": 36.557,
+     "lon": -117.3011,
+     "clearance_corrected_ft": 512.2
+    },
+    {
+     "seq": 23,
+     "lat": 36.5615,
+     "lon": -117.3104,
+     "clearance_corrected_ft": 496.4
+    },
+    {
+     "seq": 24,
+     "lat": 36.5661,
+     "lon": -117.3197,
+     "clearance_corrected_ft": 467.3
+    },
+    {
+     "seq": 25,
+     "lat": 36.5706,
+     "lon": -117.329,
+     "clearance_corrected_ft": 410.3
+    },
+    {
+     "seq": 26,
+     "lat": 36.5752,
+     "lon": -117.3383,
+     "clearance_corrected_ft": 431.0
+    },
+    {
+     "seq": 27,
+     "lat": 36.5797,
+     "lon": -117.3476,
+     "clearance_corrected_ft": 439.9
+    },
+    {
+     "seq": 28,
+     "lat": 36.5843,
+     "lon": -117.3569,
+     "clearance_corrected_ft": 477.3
+    },
+    {
+     "seq": 29,
+     "lat": 36.5888,
+     "lon": -117.3662,
+     "clearance_corrected_ft": 524.6
+    }
+   ]
+  },
+  {
+   "flight_id": "MOCK-0036",
+   "mean_clearance": 225.2,
+   "std_clearance": 65.4,
+   "min_clearance": 158.4,
+   "start_altitude": 4084.0,
+   "cluster": 1.0,
+   "anomaly_score": 49.68407220880755,
+   "is_anomaly": true,
+   "start_lat": 37.0733,
+   "start_lon": -117.7045,
+   "profile": [
+    {
+     "seq": 0,
+     "lat": 37.0733,
+     "lon": -117.7045,
+     "clearance_corrected_ft": 173.3
+    },
+    {
+     "seq": 1,
+     "lat": 37.0723,
+     "lon": -117.6942,
+     "clearance_corrected_ft": 181.0
+    },
+    {
+     "seq": 2,
+     "lat": 37.0712,
+     "lon": -117.6839,
+     "clearance_corrected_ft": 140.2
+    },
+    {
+     "seq": 3,
+     "lat": 37.0702,
+     "lon": -117.6736,
+     "clearance_corrected_ft": 136.5
+    },
+    {
+     "seq": 4,
+     "lat": 37.0692,
+     "lon": -117.6634,
+     "clearance_corrected_ft": 132.5
+    },
+    {
+     "seq": 5,
+     "lat": 37.0682,
+     "lon": -117.6531,
+     "clearance_corrected_ft": 166.3
+    },
+    {
+     "seq": 6,
+     "lat": 37.0671,
+     "lon": -117.6428,
+     "clearance_corrected_ft": 134.3
+    },
+    {
+     "seq": 7,
+     "lat": 37.0661,
+     "lon": -117.6325,
+     "clearance_corrected_ft": 200.0
+    },
+    {
+     "seq": 8,
+     "lat": 37.0651,
+     "lon": -117.6222,
+     "clearance_corrected_ft": 221.9
+    },
+    {
+     "seq": 9,
+     "lat": 37.0641,
+     "lon": -117.6119,
+     "clearance_corrected_ft": 256.4
+    },
+    {
+     "seq": 10,
+     "lat": 37.063,
+     "lon": -117.6016,
+     "clearance_corrected_ft": 209.5
+    },
+    {
+     "seq": 11,
+     "lat": 37.062,
+     "lon": -117.5913,
+     "clearance_corrected_ft": 205.4
+    },
+    {
+     "seq": 12,
+     "lat": 37.061,
+     "lon": -117.581,
+     "clearance_corrected_ft": 181.2
+    },
+    {
+     "seq": 13,
+     "lat": 37.0599,
+     "lon": -117.5707,
+     "clearance_corrected_ft": 189.7
+    },
+    {
+     "seq": 14,
+     "lat": 37.0589,
+     "lon": -117.5604,
+     "clearance_corrected_ft": 167.2
+    },
+    {
+     "seq": 15,
+     "lat": 37.0579,
+     "lon": -117.5501,
+     "clearance_corrected_ft": 197.3
+    },
+    {
+     "seq": 16,
+     "lat": 37.0569,
+     "lon": -117.5398,
+     "clearance_corrected_ft": 181.6
+    },
+    {
+     "seq": 17,
+     "lat": 37.0558,
+     "lon": -117.5295,
+     "clearance_corrected_ft": 218.6
+    },
+    {
+     "seq": 18,
+     "lat": 37.0548,
+     "lon": -117.5192,
+     "clearance_corrected_ft": 223.9
+    },
+    {
+     "seq": 19,
+     "lat": 37.0538,
+     "lon": -117.5089,
+     "clearance_corrected_ft": 201.8
+    },
+    {
+     "seq": 20,
+     "lat": 37.0528,
+     "lon": -117.4987,
+     "clearance_corrected_ft": 274.2
+    },
+    {
+     "seq": 21,
+     "lat": 37.0517,
+     "lon": -117.4884,
+     "clearance_corrected_ft": 346.6
+    },
+    {
+     "seq": 22,
+     "lat": 37.0507,
+     "lon": -117.4781,
+     "clearance_corrected_ft": 291.3
+    },
+    {
+     "seq": 23,
+     "lat": 37.0497,
+     "lon": -117.4678,
+     "clearance_corrected_ft": 290.1
+    },
+    {
+     "seq": 24,
+     "lat": 37.0487,
+     "lon": -117.4575,
+     "clearance_corrected_ft": 368.4
+    },
+    {
+     "seq": 25,
+     "lat": 37.0476,
+     "lon": -117.4472,
+     "clearance_corrected_ft": 337.6
+    },
+    {
+     "seq": 26,
+     "lat": 37.0466,
+     "lon": -117.4369,
+     "clearance_corrected_ft": 286.3
+    },
+    {
+     "seq": 27,
+     "lat": 37.0456,
+     "lon": -117.4266,
+     "clearance_corrected_ft": 317.1
+    },
+    {
+     "seq": 28,
+     "lat": 37.0446,
+     "lon": -117.4163,
+     "clearance_corrected_ft": 296.4
+    },
+    {
+     "seq": 29,
+     "lat": 37.0435,
+     "lon": -117.406,
+     "clearance_corrected_ft": 229.6
+    }
+   ]
+  },
+  {
+   "flight_id": "MOCK-0024",
+   "mean_clearance": 440.7,
+   "std_clearance": 40.9,
+   "min_clearance": 342.3,
+   "start_altitude": 3333.9,
+   "cluster": 2.0,
+   "anomaly_score": 29.22331641382059,
+   "is_anomaly": false,
+   "start_lat": 36.4459,
+   "start_lon": -116.7289,
+   "profile": [
+    {
+     "seq": 0,
+     "lat": 36.4459,
+     "lon": -116.7289,
+     "clearance_corrected_ft": 398.8
+    },
+    {
+     "seq": 1,
+     "lat": 36.438,
+     "lon": -116.7355,
+     "clearance_corrected_ft": 430.3
+    },
+    {
+     "seq": 2,
+     "lat": 36.43,
+     "lon": -116.742,
+     "clearance_corrected_ft": 463.6
+    },
+    {
+     "seq": 3,
+     "lat": 36.422,
+     "lon": -116.7486,
+     "clearance_corrected_ft": 475.3
+    },
+    {
+     "seq": 4,
+     "lat": 36.414,
+     "lon": -116.7552,
+     "clearance_corrected_ft": 501.8
+    },
+    {
+     "seq": 5,
+     "lat": 36.406,
+     "lon": -116.7617,
+     "clearance_corrected_ft": 506.9
+    },
+    {
+     "seq": 6,
+     "lat": 36.398,
+     "lon": -116.7683,
+     "clearance_corrected_ft": 482.1
+    },
+    {
+     "seq": 7,
+     "lat": 36.39,
+     "lon": -116.7749,
+     "clearance_corrected_ft": 467.8
+    },
+    {
+     "seq": 8,
+     "lat": 36.382,
+     "lon": -116.7814,
+     "clearance_corrected_ft": 473.2
+    },
+    {
+     "seq": 9,
+     "lat": 36.374,
+     "lon": -116.788,
+     "clearance_corrected_ft": 442.7
+    },
+    {
+     "seq": 10,
+     "lat": 36.366,
+     "lon": -116.7945,
+     "clearance_corrected_ft": 469.9
+    },
+    {
+     "seq": 11,
+     "lat": 36.358,
+     "lon": -116.8011,
+     "clearance_corrected_ft": 473.3
+    },
+    {
+     "seq": 12,
+     "lat": 36.35,
+     "lon": -116.8077,
+     "clearance_corrected_ft": 463.9
+    },
+    {
+     "seq": 13,
+     "lat": 36.342,
+     "lon": -116.8142,
+     "clearance_corrected_ft": 437.4
+    },
+    {
+     "seq": 14,
+     "lat": 36.334,
+     "lon": -116.8208,
+     "clearance_corrected_ft": 446.1
+    },
+    {
+     "seq": 15,
+     "lat": 36.326,
+     "lon": -116.8274,
+     "clearance_corrected_ft": 421.0
+    },
+    {
+     "seq": 16,
+     "lat": 36.318,
+     "lon": -116.8339,
+     "clearance_corrected_ft": 405.1
+    },
+    {
+     "seq": 17,
+     "lat": 36.31,
+     "lon": -116.8405,
+     "clearance_corrected_ft": 445.2
+    },
+    {
+     "seq": 18,
+     "lat": 36.302,
+     "lon": -116.8471,
+     "clearance_corrected_ft": 439.0
+    },
+    {
+     "seq": 19,
+     "lat": 36.294,
+     "lon": -116.8536,
+     "clearance_corrected_ft": 405.1
+    },
+    {
+     "seq": 20,
+     "lat": 36.286,
+     "lon": -116.8602,
+     "clearance_corrected_ft": 386.2
+    },
+    {
+     "seq": 21,
+     "lat": 36.278,
+     "lon": -116.8668,
+     "clearance_corrected_ft": 358.8
+    },
+    {
+     "seq": 22,
+     "lat": 36.27,
+     "lon": -116.8733,
+     "clearance_corrected_ft": 333.7
+    },
+    {
+     "seq": 23,
+     "lat": 36.2621,
+     "lon": -116.8799,
+     "clearance_corrected_ft": 372.8
+    },
+    {
+     "seq": 24,
+     "lat": 36.2541,
+     "lon": -116.8864,
+     "clearance_corrected_ft": 434.8
+    },
+    {
+     "seq": 25,
+     "lat": 36.2461,
+     "lon": -116.893,
+     "clearance_corrected_ft": 421.9
+    },
+    {
+     "seq": 26,
+     "lat": 36.2381,
+     "lon": -116.8996,
+     "clearance_corrected_ft": 448.4
+    },
+    {
+     "seq": 27,
+     "lat": 36.2301,
+     "lon": -116.9061,
+     "clearance_corrected_ft": 486.9
+    },
+    {
+     "seq": 28,
+     "lat": 36.2221,
+     "lon": -116.9127,
+     "clearance_corrected_ft": 471.2
+    },
+    {
+     "seq": 29,
+     "lat": 36.2141,
+     "lon": -116.9193,
+     "clearance_corrected_ft": 457.6
+    }
+   ]
+  },
+  {
+   "flight_id": "MOCK-0033",
+   "mean_clearance": 159.5,
+   "std_clearance": 41.2,
+   "min_clearance": 94.4,
+   "start_altitude": 2362.7,
+   "cluster": 1.0,
+   "anomaly_score": 22.41058971223195,
+   "is_anomaly": false,
+   "start_lat": 37.4046,
+   "start_lon": -117.6158,
+   "profile": [
+    {
+     "seq": 0,
+     "lat": 37.4046,
+     "lon": -117.6158,
+     "clearance_corrected_ft": 177.0
+    },
+    {
+     "seq": 1,
+     "lat": 37.4149,
+     "lon": -117.6158,
+     "clearance_corrected_ft": 174.8
+    },
+    {
+     "seq": 2,
+     "lat": 37.4253,
+     "lon": -117.6157,
+     "clearance_corrected_ft": 141.4
+    },
+    {
+     "seq": 3,
+     "lat": 37.4356,
+     "lon": -117.6157,
+     "clearance_corrected_ft": 124.0
+    },
+    {
+     "seq": 4,
+     "lat": 37.446,
+     "lon": -117.6156,
+     "clearance_corrected_ft": 142.2
+    },
+    {
+     "seq": 5,
+     "lat": 37.4563,
+     "lon": -117.6156,
+     "clearance_corrected_ft": 229.4
+    },
+    {
+     "seq": 6,
+     "lat": 37.4666,
+     "lon": -117.6156,
+     "clearance_corrected_ft": 206.2
+    },
+    {
+     "seq": 7,
+     "lat": 37.477,
+     "lon": -117.6155,
+     "clearance_corrected_ft": 227.4
+    },
+    {
+     "seq": 8,
+     "lat": 37.4873,
+     "lon": -117.6155,
+     "clearance_corrected_ft": 224.8
+    },
+    {
+     "seq": 9,
+     "lat": 37.4977,
+     "lon": -117.6154,
+     "clearance_corrected_ft": 233.5
+    },
+    {
+     "seq": 10,
+     "lat": 37.508,
+     "lon": -117.6154,
+     "clearance_corrected_ft": 200.3
+    },
+    {
+     "seq": 11,
+     "lat": 37.5184,
+     "lon": -117.6153,
+     "clearance_corrected_ft": 209.6
+    },
+    {
+     "seq": 12,
+     "lat": 37.5287,
+     "lon": -117.6153,
+     "clearance_corrected_ft": 191.6
+    },
+    {
+     "seq": 13,
+     "lat": 37.5391,
+     "lon": -117.6153,
+     "clearance_corrected_ft": 153.8
+    },
+    {
+     "seq": 14,
+     "lat": 37.5494,
+     "lon": -117.6152,
+     "clearance_corrected_ft": 118.8
+    },
+    {
+     "seq": 15,
+     "lat": 37.5598,
+     "lon": -117.6152,
+     "clearance_corrected_ft": 105.7
+    },
+    {
+     "seq": 16,
+     "lat": 37.5701,
+     "lon": -117.6151,
+     "clearance_corrected_ft": 119.4
+    },
+    {
+     "seq": 17,
+     "lat": 37.5804,
+     "lon": -117.6151,
+     "clearance_corrected_ft": 114.5
+    },
+    {
+     "seq": 18,
+     "lat": 37.5908,
+     "lon": -117.615,
+     "clearance_corrected_ft": 147.0
+    },
+    {
+     "seq": 19,
+     "lat": 37.6011,
+     "lon": -117.615,
+     "clearance_corrected_ft": 171.6
+    },
+    {
+     "seq": 20,
+     "lat": 37.6115,
+     "lon": -117.615,
+     "clearance_corrected_ft": 170.7
+    },
+    {
+     "seq": 21,
+     "lat": 37.6218,
+     "lon": -117.6149,
+     "clearance_corrected_ft": 154.3
+    },
+    {
+     "seq": 22,
+     "lat": 37.6322,
+     "lon": -117.6149,
+     "clearance_corrected_ft": 173.9
+    },
+    {
+     "seq": 23,
+     "lat": 37.6425,
+     "lon": -117.6148,
+     "clearance_corrected_ft": 136.9
+    },
+    {
+     "seq": 24,
+     "lat": 37.6529,
+     "lon": -117.6148,
+     "clearance_corrected_ft": 106.5
+    },
+    {
+     "seq": 25,
+     "lat": 37.6632,
+     "lon": -117.6147,
+     "clearance_corrected_ft": 135.1
+    },
+    {
+     "seq": 26,
+     "lat": 37.6735,
+     "lon": -117.6147,
+     "clearance_corrected_ft": 94.2
+    },
+    {
+     "seq": 27,
+     "lat": 37.6839,
+     "lon": -117.6147,
+     "clearance_corrected_ft": 92.0
+    },
+    {
+     "seq": 28,
+     "lat": 37.6942,
+     "lon": -117.6146,
+     "clearance_corrected_ft": 144.2
+    },
+    {
+     "seq": 29,
+     "lat": 37.7046,
+     "lon": -117.6146,
+     "clearance_corrected_ft": 164.1
+    }
+   ]
+  },
+  {
+   "flight_id": "MOCK-0011",
+   "mean_clearance": 502.8,
+   "std_clearance": 37.9,
+   "min_clearance": 406.1,
+   "start_altitude": 3005.1,
+   "cluster": 0.0,
+   "anomaly_score": 12.010233525730921,
+   "is_anomaly": false,
+   "start_lat": 36.9861,
+   "start_lon": -117.075,
+   "profile": [
+    {
+     "seq": 0,
+     "lat": 36.9861,
+     "lon": -117.075,
+     "clearance_corrected_ft": 441.8
+    },
+    {
+     "seq": 1,
+     "lat": 36.996,
+     "lon": -117.0721,
+     "clearance_corrected_ft": 446.8
+    },
+    {
+     "seq": 2,
+     "lat": 37.0059,
+     "lon": -117.0691,
+     "clearance_corrected_ft": 487.2
+    },
+    {
+     "seq": 3,
+     "lat": 37.0158,
+     "lon": -117.0661,
+     "clearance_corrected_ft": 503.9
+    },
+    {
+     "seq": 4,
+     "lat": 37.0257,
+     "lon": -117.0631,
+     "clearance_corrected_ft": 509.7
+    },
+    {
+     "seq": 5,
+     "lat": 37.0357,
+     "lon": -117.0602,
+     "clearance_corrected_ft": 533.3
+    },
+    {
+     "seq": 6,
+     "lat": 37.0456,
+     "lon": -117.0572,
+     "clearance_corrected_ft": 548.5
+    },
+    {
+     "seq": 7,
+     "lat": 37.0555,
+     "lon": -117.0542,
+     "clearance_corrected_ft": 556.4
+    },
+    {
+     "seq": 8,
+     "lat": 37.0654,
+     "lon": -117.0512,
+     "clearance_corrected_ft": 564.3
+    },
+    {
+     "seq": 9,
+     "lat": 37.0753,
+     "lon": -117.0483,
+     "clearance_corrected_ft": 569.9
+    },
+    {
+     "seq": 10,
+     "lat": 37.0852,
+     "lon": -117.0453,
+     "clearance_corrected_ft": 552.3
+    },
+    {
+     "seq": 11,
+     "lat": 37.0951,
+     "lon": -117.0423,
+     "clearance_corrected_ft": 546.7
+    },
+    {
+     "seq": 12,
+     "lat": 37.105,
+     "lon": -117.0393,
+     "clearance_corrected_ft": 506.6
+    },
+    {
+     "seq": 13,
+     "lat": 37.1149,
+     "lon": -117.0364,
+     "clearance_corrected_ft": 487.6
+    },
+    {
+     "seq": 14,
+     "lat": 37.1248,
+     "lon": -117.0334,
+     "clearance_corrected_ft": 481.5
+    },
+    {
+     "seq": 15,
+     "lat": 37.1347,
+     "lon": -117.0304,
+     "clearance_corrected_ft": 478.4
+    },
+    {
+     "seq": 16,
+     "lat": 37.1446,
+     "lon": -117.0274,
+     "clearance_corrected_ft": 437.2
+    },
+    {
+     "seq": 17,
+     "lat": 37.1546,
+     "lon": -117.0245,
+     "clearance_corrected_ft": 444.8
+    },
+    {
+     "seq": 18,
+     "lat": 37.1645,
+     "lon": -117.0215,
+     "clearance_corrected_ft": 441.1
+    },
+    {
+     "seq": 19,
+     "lat": 37.1744,
+     "lon": -117.0185,
+     "clearance_corrected_ft": 463.9
+    },
+    {
+     "seq": 20,
+     "lat": 37.1843,
+     "lon": -117.0156,
+     "clearance_corrected_ft": 485.7
+    },
+    {
+     "seq": 21,
+     "lat": 37.1942,
+     "lon": -117.0126,
+     "clearance_corrected_ft": 512.3
+    },
+    {
+     "seq": 22,
+     "lat": 37.2041,
+     "lon": -117.0096,
+     "clearance_corrected_ft": 523.6
+    },
+    {
+     "seq": 23,
+     "lat": 37.214,
+     "lon": -117.0066,
+     "clearance_corrected_ft": 510.6
+    },
+    {
+     "seq": 24,
+     "lat": 37.2239,
+     "lon": -117.0037,
+     "clearance_corrected_ft": 502.8
+    },
+    {
+     "seq": 25,
+     "lat": 37.2338,
+     "lon": -117.0007,
+     "clearance_corrected_ft": 482.9
+    },
+    {
+     "seq": 26,
+     "lat": 37.2437,
+     "lon": -116.9977,
+     "clearance_corrected_ft": 493.9
+    },
+    {
+     "seq": 27,
+     "lat": 37.2536,
+     "lon": -116.9947,
+     "clearance_corrected_ft": 525.1
+    },
+    {
+     "seq": 28,
+     "lat": 37.2635,
+     "lon": -116.9918,
+     "clearance_corrected_ft": 537.9
+    },
+    {
+     "seq": 29,
+     "lat": 37.2735,
+     "lon": -116.9888,
+     "clearance_corrected_ft": 507.4
+    }
+   ]
+  },
+  {
+   "flight_id": "MOCK-0023",
+   "mean_clearance": 523.4,
+   "std_clearance": 36.6,
+   "min_clearance": 452.3,
+   "start_altitude": 2134.0,
+   "cluster": 0.0,
+   "anomaly_score": 31.92261512472561,
+   "is_anomaly": false,
+   "start_lat": 36.4399,
+   "start_lon": -116.7446,
+   "profile": [
+    {
+     "seq": 0,
+     "lat": 36.4399,
+     "lon": -116.7446,
+     "clearance_corrected_ft": 539.7
+    },
+    {
+     "seq": 1,
+     "lat": 36.4459,
+     "lon": -116.753,
+     "clearance_corrected_ft": 514.2
+    },
+    {
+     "seq": 2,
+     "lat": 36.4518,
+     "lon": -116.7615,
+     "clearance_corrected_ft": 500.4
+    },
+    {
+     "seq": 3,
+     "lat": 36.4578,
+     "lon": -116.7699,
+     "clearance_corrected_ft": 518.5
+    },
+    {
+     "seq": 4,
+     "lat": 36.4638,
+     "lon": -116.7784,
+     "clearance_corrected_ft": 512.8
+    },
+    {
+     "seq": 5,
+     "lat": 36.4697,
+     "lon": -116.7868,
+     "clearance_corrected_ft": 503.3
+    },
+    {
+     "seq": 6,
+     "lat": 36.4757,
+     "lon": -116.7953,
+     "clearance_corrected_ft": 527.0
+    },
+    {
+     "seq": 7,
+     "lat": 36.4817,
+     "lon": -116.8037,
+     "clearance_corrected_ft": 555.9
+    },
+    {
+     "seq": 8,
+     "lat": 36.4876,
+     "lon": -116.8122,
+     "clearance_corrected_ft": 579.3
+    },
+    {
+     "seq": 9,
+     "lat": 36.4936,
+     "lon": -116.8206,
+     "clearance_corrected_ft": 595.8
+    },
+    {
+     "seq": 10,
+     "lat": 36.4996,
+     "lon": -116.8291,
+     "clearance_corrected_ft": 596.2
+    },
+    {
+     "seq": 11,
+     "lat": 36.5056,
+     "lon": -116.8375,
+     "clearance_corrected_ft": 554.5
+    },
+    {
+     "seq": 12,
+     "lat": 36.5115,
+     "lon": -116.846,
+     "clearance_corrected_ft": 533.9
+    },
+    {
+     "seq": 13,
+     "lat": 36.5175,
+     "lon": -116.8544,
+     "clearance_corrected_ft": 520.6
+    },
+    {
+     "seq": 14,
+     "lat": 36.5235,
+     "lon": -116.8629,
+     "clearance_corrected_ft": 493.8
+    },
+    {
+     "seq": 15,
+     "lat": 36.5294,
+     "lon": -116.8713,
+     "clearance_corrected_ft": 497.6
+    },
+    {
+     "seq": 16,
+     "lat": 36.5354,
+     "lon": -116.8798,
+     "clearance_corrected_ft": 515.6
+    },
+    {
+     "seq": 17,
+     "lat": 36.5414,
+     "lon": -116.8882,
+     "clearance_corrected_ft": 503.4
+    },
+    {
+     "seq": 18,
+     "lat": 36.5473,
+     "lon": -116.8967,
+     "clearance_corrected_ft": 520.7
+    },
+    {
+     "seq": 19,
+     "lat": 36.5533,
+     "lon": -116.9051,
+     "clearance_corrected_ft": 536.8
+    },
+    {
+     "seq": 20,
+     "lat": 36.5593,
+     "lon": -116.9136,
+     "clearance_corrected_ft": 526.2
+    },
+    {
+     "seq": 21,
+     "lat": 36.5652,
+     "lon": -116.922,
+     "clearance_corrected_ft": 546.0
+    },
+    {
+     "seq": 22,
+     "lat": 36.5712,
+     "lon": -116.9305,
+     "clearance_corrected_ft": 576.5
+    },
+    {
+     "seq": 23,
+     "lat": 36.5772,
+     "lon": -116.9389,
+     "clearance_corrected_ft": 559.5
+    },
+    {
+     "seq": 24,
+     "lat": 36.5832,
+     "lon": -116.9474,
+     "clearance_corrected_ft": 511.6
+    },
+    {
+     "seq": 25,
+     "lat": 36.5891,
+     "lon": -116.9558,
+     "clearance_corrected_ft": 497.9
+    },
+    {
+     "seq": 26,
+     "lat": 36.5951,
+     "lon": -116.9643,
+     "clearance_corrected_ft": 476.7
+    },
+    {
+     "seq": 27,
+     "lat": 36.6011,
+     "lon": -116.9727,
+     "clearance_corrected_ft": 445.3
+    },
+    {
+     "seq": 28,
+     "lat": 36.607,
+     "lon": -116.9812,
+     "clearance_corrected_ft": 443.1
+    },
+    {
+     "seq": 29,
+     "lat": 36.613,
+     "lon": -116.9896,
+     "clearance_corrected_ft": 499.1
+    }
+   ]
+  },
+  {
+   "flight_id": "MOCK-0019",
+   "mean_clearance": 502.7,
+   "std_clearance": 26.3,
+   "min_clearance": 412.7,
+   "start_altitude": 4198.4,
+   "cluster": 0.0,
+   "anomaly_score": 13.199570088416257,
+   "is_anomaly": false,
+   "start_lat": 37.1181,
+   "start_lon": -117.4537,
+   "profile": [
+    {
+     "seq": 0,
+     "lat": 37.1181,
+     "lon": -117.4537,
+     "clearance_corrected_ft": 459.5
+    },
+    {
+     "seq": 1,
+     "lat": 37.1269,
+     "lon": -117.4483,
+     "clearance_corrected_ft": 476.6
+    },
+    {
+     "seq": 2,
+     "lat": 37.1357,
+     "lon": -117.4429,
+     "clearance_corrected_ft": 486.8
+    },
+    {
+     "seq": 3,
+     "lat": 37.1445,
+     "lon": -117.4375,
+     "clearance_corrected_ft": 470.9
+    },
+    {
+     "seq": 4,
+     "lat": 37.1533,
+     "lon": -117.432,
+     "clearance_corrected_ft": 467.5
+    },
+    {
+     "seq": 5,
+     "lat": 37.1621,
+     "lon": -117.4266,
+     "clearance_corrected_ft": 487.8
+    },
+    {
+     "seq": 6,
+     "lat": 37.1709,
+     "lon": -117.4212,
+     "clearance_corrected_ft": 468.2
+    },
+    {
+     "seq": 7,
+     "lat": 37.1797,
+     "lon": -117.4158,
+     "clearance_corrected_ft": 479.4
+    },
+    {
+     "seq": 8,
+     "lat": 37.1886,
+     "lon": -117.4104,
+     "clearance_corrected_ft": 490.9
+    },
+    {
+     "seq": 9,
+     "lat": 37.1974,
+     "lon": -117.4049,
+     "clearance_corrected_ft": 527.2
+    },
+    {
+     "seq": 10,
+     "lat": 37.2062,
+     "lon": -117.3995,
+     "clearance_corrected_ft": 506.9
+    },
+    {
+     "seq": 11,
+     "lat": 37.215,
+     "lon": -117.3941,
+     "clearance_corrected_ft": 534.6
+    },
+    {
+     "seq": 12,
+     "lat": 37.2238,
+     "lon": -117.3887,
+     "clearance_corrected_ft": 529.4
+    },
+    {
+     "seq": 13,
+     "lat": 37.2326,
+     "lon": -117.3833,
+     "clearance_corrected_ft": 528.9
+    },
+    {
+     "seq": 14,
+     "lat": 37.2414,
+     "lon": -117.3778,
+     "clearance_corrected_ft": 500.0
+    },
+    {
+     "seq": 15,
+     "lat": 37.2502,
+     "lon": -117.3724,
+     "clearance_corrected_ft": 522.0
+    },
+    {
+     "seq": 16,
+     "lat": 37.259,
+     "lon": -117.367,
+     "clearance_corrected_ft": 520.4
+    },
+    {
+     "seq": 17,
+     "lat": 37.2678,
+     "lon": -117.3616,
+     "clearance_corrected_ft": 525.7
+    },
+    {
+     "seq": 18,
+     "lat": 37.2767,
+     "lon": -117.3561,
+     "clearance_corrected_ft": 519.1
+    },
+    {
+     "seq": 19,
+     "lat": 37.2855,
+     "lon": -117.3507,
+     "clearance_corrected_ft": 501.8
+    },
+    {
+     "seq": 20,
+     "lat": 37.2943,
+     "lon": -117.3453,
+     "clearance_corrected_ft": 496.6
+    },
+    {
+     "seq": 21,
+     "lat": 37.3031,
+     "lon": -117.3399,
+     "clearance_corrected_ft": 487.1
+    },
+    {
+     "seq": 22,
+     "lat": 37.3119,
+     "lon": -117.3345,
+     "clearance_corrected_ft": 501.8
+    },
+    {
+     "seq": 23,
+     "lat": 37.3207,
+     "lon": -117.329,
+     "clearance_corrected_ft": 515.8
+    },
+    {
+     "seq": 24,
+     "lat": 37.3295,
+     "lon": -117.3236,
+     "clearance_corrected_ft": 537.8
+    },
+    {
+     "seq": 25,
+     "lat": 37.3383,
+     "lon": -117.3182,
+     "clearance_corrected_ft": 551.6
+    },
+    {
+     "seq": 26,
+     "lat": 37.3471,
+     "lon": -117.3128,
+     "clearance_corrected_ft": 545.9
+    },
+    {
+     "seq": 27,
+     "lat": 37.356,
+     "lon": -117.3074,
+     "clearance_corrected_ft": 506.3
+    },
+    {
+     "seq": 28,
+     "lat": 37.3648,
+     "lon": -117.3019,
+     "clearance_corrected_ft": 484.3
+    },
+    {
+     "seq": 29,
+     "lat": 37.3736,
+     "lon": -117.2965,
+     "clearance_corrected_ft": 450.0
+    }
+   ]
+  },
+  {
+   "flight_id": "MOCK-0021",
+   "mean_clearance": 438.9,
+   "std_clearance": 18.2,
+   "min_clearance": 368.4,
+   "start_altitude": 3407.2,
+   "cluster": 2.0,
+   "anomaly_score": 32.86084126873354,
+   "is_anomaly": false,
+   "start_lat": 36.5428,
+   "start_lon": -117.258,
+   "profile": [
+    {
+     "seq": 0,
+     "lat": 36.5428,
+     "lon": -117.258,
+     "clearance_corrected_ft": 472.8
+    },
+    {
+     "seq": 1,
+     "lat": 36.5504,
+     "lon": -117.251,
+     "clearance_corrected_ft": 466.6
+    },
+    {
+     "seq": 2,
+     "lat": 36.5581,
+     "lon": -117.2441,
+     "clearance_corrected_ft": 447.5
+    },
+    {
+     "seq": 3,
+     "lat": 36.5657,
+     "lon": -117.2371,
+     "clearance_corrected_ft": 428.5
+    },
+    {
+     "seq": 4,
+     "lat": 36.5733,
+     "lon": -117.2301,
+     "clearance_corrected_ft": 429.4
+    },
+    {
+     "seq": 5,
+     "lat": 36.581,
+     "lon": -117.2231,
+     "clearance_corrected_ft": 451.8
+    },
+    {
+     "seq": 6,
+     "lat": 36.5886,
+     "lon": -117.2161,
+     "clearance_corrected_ft": 429.7
+    },
+    {
+     "seq": 7,
+     "lat": 36.5963,
+     "lon": -117.2091,
+     "clearance_corrected_ft": 430.7
+    },
+    {
+     "seq": 8,
+     "lat": 36.6039,
+     "lon": -117.2022,
+     "clearance_corrected_ft": 426.0
+    },
+    {
+     "seq": 9,
+     "lat": 36.6115,
+     "lon": -117.1952,
+     "clearance_corrected_ft": 428.7
+    },
+    {
+     "seq": 10,
+     "lat": 36.6192,
+     "lon": -117.1882,
+     "clearance_corrected_ft": 419.2
+    },
+    {
+     "seq": 11,
+     "lat": 36.6268,
+     "lon": -117.1812,
+     "clearance_corrected_ft": 439.6
+    },
+    {
+     "seq": 12,
+     "lat": 36.6344,
+     "lon": -117.1742,
+     "clearance_corrected_ft": 446.0
+    },
+    {
+     "seq": 13,
+     "lat": 36.6421,
+     "lon": -117.1673,
+     "clearance_corrected_ft": 437.5
+    },
+    {
+     "seq": 14,
+     "lat": 36.6497,
+     "lon": -117.1603,
+     "clearance_corrected_ft": 448.9
+    },
+    {
+     "seq": 15,
+     "lat": 36.6573,
+     "lon": -117.1533,
+     "clearance_corrected_ft": 431.0
+    },
+    {
+     "seq": 16,
+     "lat": 36.665,
+     "lon": -117.1463,
+     "clearance_corrected_ft": 439.5
+    },
+    {
+     "seq": 17,
+     "lat": 36.6726,
+     "lon": -117.1393,
+     "clearance_corrected_ft": 432.1
+    },
+    {
+     "seq": 18,
+     "lat": 36.6802,
+     "lon": -117.1324,
+     "clearance_corrected_ft": 419.8
+    },
+    {
+     "seq": 19,
+     "lat": 36.6879,
+     "lon": -117.1254,
+     "clearance_corrected_ft": 396.7
+    },
+    {
+     "seq": 20,
+     "lat": 36.6955,
+     "lon": -117.1184,
+     "clearance_corrected_ft": 406.9
+    },
+    {
+     "seq": 21,
+     "lat": 36.7031,
+     "lon": -117.1114,
+     "clearance_corrected_ft": 418.5
+    },
+    {
+     "seq": 22,
+     "lat": 36.7108,
+     "lon": -117.1044,
+     "clearance_corrected_ft": 419.8
+    },
+    {
+     "seq": 23,
+     "lat": 36.7184,
+     "lon": -117.0975,
+     "clearance_corrected_ft": 455.0
+    },
+    {
+     "seq": 24,
+     "lat": 36.726,
+     "lon": -117.0905,
+     "clearance_corrected_ft": 446.9
+    },
+    {
+     "seq": 25,
+     "lat": 36.7337,
+     "lon": -117.0835,
+     "clearance_corrected_ft": 461.9
+    },
+    {
+     "seq": 26,
+     "lat": 36.7413,
+     "lon": -117.0765,
+     "clearance_corrected_ft": 465.0
+    },
+    {
+     "seq": 27,
+     "lat": 36.749,
+     "lon": -117.0695,
+     "clearance_corrected_ft": 461.8
+    },
+    {
+     "seq": 28,
+     "lat": 36.7566,
+     "lon": -117.0626,
+     "clearance_corrected_ft": 455.9
+    },
+    {
+     "seq": 29,
+     "lat": 36.7642,
+     "lon": -117.0556,
+     "clearance_corrected_ft": 453.3
+    }
+   ]
+  },
+  {
+   "flight_id": "MOCK-0008",
+   "mean_clearance": 431.0,
+   "std_clearance": 37.2,
+   "min_clearance": 350.7,
+   "start_altitude": 2605.6,
+   "cluster": 2.0,
+   "anomaly_score": 19.232010353111956,
+   "is_anomaly": false,
+   "start_lat": 36.6965,
+   "start_lon": -117.7171,
+   "profile": [
+    {
+     "seq": 0,
+     "lat": 36.6965,
+     "lon": -117.7171,
+     "clearance_corrected_ft": 466.4
+    },
+    {
+     "seq": 1,
+     "lat": 36.688,
+     "lon": -117.7112,
+     "clearance_corrected_ft": 444.1
+    },
+    {
+     "seq": 2,
+     "lat": 36.6795,
+     "lon": -117.7052,
+     "clearance_corrected_ft": 440.1
+    },
+    {
+     "seq": 3,
+     "lat": 36.6711,
+     "lon": -117.6993,
+     "clearance_corrected_ft": 468.4
+    },
+    {
+     "seq": 4,
+     "lat": 36.6626,
+     "lon": -117.6934,
+     "clearance_corrected_ft": 454.4
+    },
+    {
+     "seq": 5,
+     "lat": 36.6541,
+     "lon": -117.6875,
+     "clearance_corrected_ft": 479.0
+    },
+    {
+     "seq": 6,
+     "lat": 36.6456,
+     "lon": -117.6815,
+     "clearance_corrected_ft": 470.6
+    },
+    {
+     "seq": 7,
+     "lat": 36.6371,
+     "lon": -117.6756,
+     "clearance_corrected_ft": 446.9
+    },
+    {
+     "seq": 8,
+     "lat": 36.6287,
+     "lon": -117.6697,
+     "clearance_corrected_ft": 434.5
+    },
+    {
+     "seq": 9,
+     "lat": 36.6202,
+     "lon": -117.6637,
+     "clearance_corrected_ft": 417.4
+    },
+    {
+     "seq": 10,
+     "lat": 36.6117,
+     "lon": -117.6578,
+     "clearance_corrected_ft": 391.8
+    },
+    {
+     "seq": 11,
+     "lat": 36.6032,
+     "lon": -117.6519,
+     "clearance_corrected_ft": 384.1
+    },
+    {
+     "seq": 12,
+     "lat": 36.5947,
+     "lon": -117.646,
+     "clearance_corrected_ft": 396.2
+    },
+    {
+     "seq": 13,
+     "lat": 36.5863,
+     "lon": -117.64,
+     "clearance_corrected_ft": 367.3
+    },
+    {
+     "seq": 14,
+     "lat": 36.5778,
+     "lon": -117.6341,
+     "clearance_corrected_ft": 357.6
+    },
+    {
+     "seq": 15,
+     "lat": 36.5693,
+     "lon": -117.6282,
+     "clearance_corrected_ft": 352.7
+    },
+    {
+     "seq": 16,
+     "lat": 36.5608,
+     "lon": -117.6223,
+     "clearance_corrected_ft": 374.6
+    },
+    {
+     "seq": 17,
+     "lat": 36.5524,
+     "lon": -117.6163,
+     "clearance_corrected_ft": 388.2
+    },
+    {
+     "seq": 18,
+     "lat": 36.5439,
+     "lon": -117.6104,
+     "clearance_corrected_ft": 446.6
+    },
+    {
+     "seq": 19,
+     "lat": 36.5354,
+     "lon": -117.6045,
+     "clearance_corrected_ft": 444.3
+    },
+    {
+     "seq": 20,
+     "lat": 36.5269,
+     "lon": -117.5985,
+     "clearance_corrected_ft": 458.8
+    },
+    {
+     "seq": 21,
+     "lat": 36.5184,
+     "lon": -117.5926,
+     "clearance_corrected_ft": 469.8
+    },
+    {
+     "seq": 22,
+     "lat": 36.51,
+     "lon": -117.5867,
+     "clearance_corrected_ft": 460.4
+    },
+    {
+     "seq": 23,
+     "lat": 36.5015,
+     "lon": -117.5808,
+     "clearance_corrected_ft": 425.1
+    },
+    {
+     "seq": 24,
+     "lat": 36.493,
+     "lon": -117.5748,
+     "clearance_corrected_ft": 473.6
+    },
+    {
+     "seq": 25,
+     "lat": 36.4845,
+     "lon": -117.5689,
+     "clearance_corrected_ft": 478.8
+    },
+    {
+     "seq": 26,
+     "lat": 36.476,
+     "lon": -117.563,
+     "clearance_corrected_ft": 447.4
+    },
+    {
+     "seq": 27,
+     "lat": 36.4676,
+     "lon": -117.5571,
+     "clearance_corrected_ft": 430.8
+    },
+    {
+     "seq": 28,
+     "lat": 36.4591,
+     "lon": -117.5511,
+     "clearance_corrected_ft": 440.8
+    },
+    {
+     "seq": 29,
+     "lat": 36.4506,
+     "lon": -117.5452,
+     "clearance_corrected_ft": 419.6
+    }
+   ]
+  },
+  {
+   "flight_id": "MOCK-0015",
+   "mean_clearance": 478.1,
+   "std_clearance": 30.3,
+   "min_clearance": 440.2,
+   "start_altitude": 2464.6,
+   "cluster": 0.0,
+   "anomaly_score": 13.899993776602713,
+   "is_anomaly": false,
+   "start_lat": 36.1289,
+   "start_lon": -116.8634,
+   "profile": [
+    {
+     "seq": 0,
+     "lat": 36.1289,
+     "lon": -116.8634,
+     "clearance_corrected_ft": 461.2
+    },
+    {
+     "seq": 1,
+     "lat": 36.1357,
+     "lon": -116.8712,
+     "clearance_corrected_ft": 451.1
+    },
+    {
+     "seq": 2,
+     "lat": 36.1426,
+     "lon": -116.8789,
+     "clearance_corrected_ft": 463.1
+    },
+    {
+     "seq": 3,
+     "lat": 36.1495,
+     "lon": -116.8866,
+     "clearance_corrected_ft": 449.5
+    },
+    {
+     "seq": 4,
+     "lat": 36.1563,
+     "lon": -116.8944,
+     "clearance_corrected_ft": 418.7
+    },
+    {
+     "seq": 5,
+     "lat": 36.1632,
+     "lon": -116.9021,
+     "clearance_corrected_ft": 435.8
+    },
+    {
+     "seq": 6,
+     "lat": 36.1701,
+     "lon": -116.9099,
+     "clearance_corrected_ft": 447.9
+    },
+    {
+     "seq": 7,
+     "lat": 36.1769,
+     "lon": -116.9176,
+     "clearance_corrected_ft": 461.1
+    },
+    {
+     "seq": 8,
+     "lat": 36.1838,
+     "lon": -116.9253,
+     "clearance_corrected_ft": 442.7
+    },
+    {
+     "seq": 9,
+     "lat": 36.1906,
+     "lon": -116.9331,
+     "clearance_corrected_ft": 496.7
+    },
+    {
+     "seq": 10,
+     "lat": 36.1975,
+     "lon": -116.9408,
+     "clearance_corrected_ft": 487.1
+    },
+    {
+     "seq": 11,
+     "lat": 36.2044,
+     "lon": -116.9486,
+     "clearance_corrected_ft": 489.5
+    },
+    {
+     "seq": 12,
+     "lat": 36.2112,
+     "lon": -116.9563,
+     "clearance_corrected_ft": 485.5
+    },
+    {
+     "seq": 13,
+     "lat": 36.2181,
+     "lon": -116.964,
+     "clearance_corrected_ft": 521.6
+    },
+    {
+     "seq": 14,
+     "lat": 36.225,
+     "lon": -116.9718,
+     "clearance_corrected_ft": 493.6
+    },
+    {
+     "seq": 15,
+     "lat": 36.2318,
+     "lon": -116.9795,
+     "clearance_corrected_ft": 493.2
+    },
+    {
+     "seq": 16,
+     "lat": 36.2387,
+     "lon": -116.9873,
+     "clearance_corrected_ft": 489.5
+    },
+    {
+     "seq": 17,
+     "lat": 36.2455,
+     "lon": -116.995,
+     "clearance_corrected_ft": 467.3
+    },
+    {
+     "seq": 18,
+     "lat": 36.2524,
+     "lon": -117.0028,
+     "clearance_corrected_ft": 427.4
+    },
+    {
+     "seq": 19,
+     "lat": 36.2593,
+     "lon": -117.0105,
+     "clearance_corrected_ft": 457.9
+    },
+    {
+     "seq": 20,
+     "lat": 36.2661,
+     "lon": -117.0182,
+     "clearance_corrected_ft": 479.2
+    },
+    {
+     "seq": 21,
+     "lat": 36.273,
+     "lon": -117.026,
+     "clearance_corrected_ft": 492.7
+    },
+    {
+     "seq": 22,
+     "lat": 36.2799,
+     "lon": -117.0337,
+     "clearance_corrected_ft": 490.5
+    },
+    {
+     "seq": 23,
+     "lat": 36.2867,
+     "lon": -117.0415,
+     "clearance_corrected_ft": 535.8
+    },
+    {
+     "seq": 24,
+     "lat": 36.2936,
+     "lon": -117.0492,
+     "clearance_corrected_ft": 521.7
+    },
+    {
+     "seq": 25,
+     "lat": 36.3004,
+     "lon": -117.0569,
+     "clearance_corrected_ft": 531.4
+    },
+    {
+     "seq": 26,
+     "lat": 36.3073,
+     "lon": -117.0647,
+     "clearance_corrected_ft": 510.5
+    },
+    {
+     "seq": 27,
+     "lat": 36.3142,
+     "lon": -117.0724,
+     "clearance_corrected_ft": 507.1
+    },
+    {
+     "seq": 28,
+     "lat": 36.321,
+     "lon": -117.0802,
+     "clearance_corrected_ft": 488.4
+    },
+    {
+     "seq": 29,
+     "lat": 36.3279,
+     "lon": -117.0879,
+     "clearance_corrected_ft": 445.3
+    }
+   ]
+  },
+  {
+   "flight_id": "MOCK-0029",
+   "mean_clearance": 474.8,
+   "std_clearance": 43.6,
+   "min_clearance": 373.8,
+   "start_altitude": 3733.0,
+   "cluster": 0.0,
+   "anomaly_score": 19.63356528532561,
+   "is_anomaly": false,
+   "start_lat": 36.0175,
+   "start_lon": -116.9272,
+   "profile": [
+    {
+     "seq": 0,
+     "lat": 36.0175,
+     "lon": -116.9272,
+     "clearance_corrected_ft": 526.8
+    },
+    {
+     "seq": 1,
+     "lat": 36.0171,
+     "lon": -116.9169,
+     "clearance_corrected_ft": 554.0
+    },
+    {
+     "seq": 2,
+     "lat": 36.0166,
+     "lon": -116.9066,
+     "clearance_corrected_ft": 540.7
+    },
+    {
+     "seq": 3,
+     "lat": 36.0162,
+     "lon": -116.8962,
+     "clearance_corrected_ft": 495.8
+    },
+    {
+     "seq": 4,
+     "lat": 36.0158,
+     "lon": -116.8859,
+     "clearance_corrected_ft": 488.1
+    },
+    {
+     "seq": 5,
+     "lat": 36.0153,
+     "lon": -116.8755,
+     "clearance_corrected_ft": 464.4
+    },
+    {
+     "seq": 6,
+     "lat": 36.0149,
+     "lon": -116.8652,
+     "clearance_corrected_ft": 434.9
+    },
+    {
+     "seq": 7,
+     "lat": 36.0145,
+     "lon": -116.8549,
+     "clearance_corrected_ft": 424.2
+    },
+    {
+     "seq": 8,
+     "lat": 36.014,
+     "lon": -116.8445,
+     "clearance_corrected_ft": 433.2
+    },
+    {
+     "seq": 9,
+     "lat": 36.0136,
+     "lon": -116.8342,
+     "clearance_corrected_ft": 447.5
+    },
+    {
+     "seq": 10,
+     "lat": 36.0132,
+     "lon": -116.8239,
+     "clearance_corrected_ft": 457.2
+    },
+    {
+     "seq": 11,
+     "lat": 36.0127,
+     "lon": -116.8135,
+     "clearance_corrected_ft": 467.2
+    },
+    {
+     "seq": 12,
+     "lat": 36.0123,
+     "lon": -116.8032,
+     "clearance_corrected_ft": 475.6
+    },
+    {
+     "seq": 13,
+     "lat": 36.0119,
+     "lon": -116.7929,
+     "clearance_corrected_ft": 450.5
+    },
+    {
+     "seq": 14,
+     "lat": 36.0114,
+     "lon": -116.7825,
+     "clearance_corrected_ft": 393.6
+    },
+    {
+     "seq": 15,
+     "lat": 36.011,
+     "lon": -116.7722,
+     "clearance_corrected_ft": 437.4
+    },
+    {
+     "seq": 16,
+     "lat": 36.0106,
+     "lon": -116.7619,
+     "clearance_corrected_ft": 479.7
+    },
+    {
+     "seq": 17,
+     "lat": 36.0101,
+     "lon": -116.7515,
+     "clearance_corrected_ft": 507.1
+    },
+    {
+     "seq": 18,
+     "lat": 36.0097,
+     "lon": -116.7412,
+     "clearance_corrected_ft": 515.7
+    },
+    {
+     "seq": 19,
+     "lat": 36.0093,
+     "lon": -116.7308,
+     "clearance_corrected_ft": 554.1
+    },
+    {
+     "seq": 20,
+     "lat": 36.0088,
+     "lon": -116.7205,
+     "clearance_corrected_ft": 518.7
+    },
+    {
+     "seq": 21,
+     "lat": 36.0084,
+     "lon": -116.7102,
+     "clearance_corrected_ft": 487.7
+    },
+    {
+     "seq": 22,
+     "lat": 36.008,
+     "lon": -116.6998,
+     "clearance_corrected_ft": 483.9
+    },
+    {
+     "seq": 23,
+     "lat": 36.0075,
+     "lon": -116.6895,
+     "clearance_corrected_ft": 503.7
+    },
+    {
+     "seq": 24,
+     "lat": 36.0071,
+     "lon": -116.6792,
+     "clearance_corrected_ft": 501.7
+    },
+    {
+     "seq": 25,
+     "lat": 36.0067,
+     "lon": -116.6688,
+     "clearance_corrected_ft": 496.9
+    },
+    {
+     "seq": 26,
+     "lat": 36.0062,
+     "lon": -116.6585,
+     "clearance_corrected_ft": 473.0
+    },
+    {
+     "seq": 27,
+     "lat": 36.0058,
+     "lon": -116.6482,
+     "clearance_corrected_ft": 433.1
+    },
+    {
+     "seq": 28,
+     "lat": 36.0054,
+     "lon": -116.6378,
+     "clearance_corrected_ft": 418.8
+    },
+    {
+     "seq": 29,
+     "lat": 36.0049,
+     "lon": -116.6275,
+     "clearance_corrected_ft": 378.6
+    }
+   ]
+  },
+  {
+   "flight_id": "MOCK-0039",
+   "mean_clearance": 147.0,
+   "std_clearance": 64.4,
+   "min_clearance": 27.0,
+   "start_altitude": 2950.4,
+   "cluster": 1.0,
+   "anomaly_score": 30.64705583330972,
+   "is_anomaly": false,
+   "start_lat": 37.49,
+   "start_lon": -116.9753,
+   "profile": [
+    {
+     "seq": 0,
+     "lat": 37.49,
+     "lon": -116.9753,
+     "clearance_corrected_ft": 77.3
+    },
+    {
+     "seq": 1,
+     "lat": 37.5001,
+     "lon": -116.9732,
+     "clearance_corrected_ft": 115.9
+    },
+    {
+     "seq": 2,
+     "lat": 37.5102,
+     "lon": -116.9711,
+     "clearance_corrected_ft": 185.7
+    },
+    {
+     "seq": 3,
+     "lat": 37.5203,
+     "lon": -116.9689,
+     "clearance_corrected_ft": 200.0
+    },
+    {
+     "seq": 4,
+     "lat": 37.5305,
+     "lon": -116.9668,
+     "clearance_corrected_ft": 274.1
+    },
+    {
+     "seq": 5,
+     "lat": 37.5406,
+     "lon": -116.9647,
+     "clearance_corrected_ft": 204.6
+    },
+    {
+     "seq": 6,
+     "lat": 37.5507,
+     "lon": -116.9625,
+     "clearance_corrected_ft": 198.2
+    },
+    {
+     "seq": 7,
+     "lat": 37.5608,
+     "lon": -116.9604,
+     "clearance_corrected_ft": 151.8
+    },
+    {
+     "seq": 8,
+     "lat": 37.571,
+     "lon": -116.9583,
+     "clearance_corrected_ft": 77.1
+    },
+    {
+     "seq": 9,
+     "lat": 37.5811,
+     "lon": -116.9561,
+     "clearance_corrected_ft": 113.5
+    },
+    {
+     "seq": 10,
+     "lat": 37.5912,
+     "lon": -116.954,
+     "clearance_corrected_ft": 208.6
+    },
+    {
+     "seq": 11,
+     "lat": 37.6013,
+     "lon": -116.9519,
+     "clearance_corrected_ft": 130.8
+    },
+    {
+     "seq": 12,
+     "lat": 37.6114,
+     "lon": -116.9497,
+     "clearance_corrected_ft": 156.2
+    },
+    {
+     "seq": 13,
+     "lat": 37.6216,
+     "lon": -116.9476,
+     "clearance_corrected_ft": 235.1
+    },
+    {
+     "seq": 14,
+     "lat": 37.6317,
+     "lon": -116.9455,
+     "clearance_corrected_ft": 156.7
+    },
+    {
+     "seq": 15,
+     "lat": 37.6418,
+     "lon": -116.9433,
+     "clearance_corrected_ft": 62.5
+    },
+    {
+     "seq": 16,
+     "lat": 37.6519,
+     "lon": -116.9412,
+     "clearance_corrected_ft": 73.3
+    },
+    {
+     "seq": 17,
+     "lat": 37.6621,
+     "lon": -116.9391,
+     "clearance_corrected_ft": 82.5
+    },
+    {
+     "seq": 18,
+     "lat": 37.6722,
+     "lon": -116.9369,
+     "clearance_corrected_ft": 96.0
+    },
+    {
+     "seq": 19,
+     "lat": 37.6823,
+     "lon": -116.9348,
+     "clearance_corrected_ft": 129.7
+    },
+    {
+     "seq": 20,
+     "lat": 37.6924,
+     "lon": -116.9327,
+     "clearance_corrected_ft": 177.8
+    },
+    {
+     "seq": 21,
+     "lat": 37.7026,
+     "lon": -116.9305,
+     "clearance_corrected_ft": 271.0
+    },
+    {
+     "seq": 22,
+     "lat": 37.7127,
+     "lon": -116.9284,
+     "clearance_corrected_ft": 234.6
+    },
+    {
+     "seq": 23,
+     "lat": 37.7228,
+     "lon": -116.9263,
+     "clearance_corrected_ft": 235.7
+    },
+    {
+     "seq": 24,
+     "lat": 37.7329,
+     "lon": -116.9241,
+     "clearance_corrected_ft": 139.9
+    },
+    {
+     "seq": 25,
+     "lat": 37.743,
+     "lon": -116.922,
+     "clearance_corrected_ft": 98.9
+    },
+    {
+     "seq": 26,
+     "lat": 37.7532,
+     "lon": -116.9199,
+     "clearance_corrected_ft": 67.5
+    },
+    {
+     "seq": 27,
+     "lat": 37.7633,
+     "lon": -116.9177,
+     "clearance_corrected_ft": 60.5
+    },
+    {
+     "seq": 28,
+     "lat": 37.7734,
+     "lon": -116.9156,
+     "clearance_corrected_ft": 68.9
+    },
+    {
+     "seq": 29,
+     "lat": 37.7835,
+     "lon": -116.9135,
+     "clearance_corrected_ft": 125.9
+    }
+   ]
+  }
+ ],
+ "clusters": [
+  {
+   "cluster": 0.0,
+   "flight_count": 17,
+   "mean_anomaly_score": 23.56,
+   "anomaly_count": 2
+  },
+  {
+   "cluster": 1.0,
+   "flight_count": 8,
+   "mean_anomaly_score": 28.53,
+   "anomaly_count": 1
+  },
+  {
+   "cluster": 2.0,
+   "flight_count": 15,
+   "mean_anomaly_score": 27.12,
+   "anomaly_count": 3
+  }
+ ]
+};
+const getMock = async () => _EMBEDDED_MOCK;
+const j = async p => { const r = await fetch(API + p); if (!r.ok) throw new Error(p + ' → ' + r.status); return r.json(); };
+const Data = {
+  async load() {
+    if (SOURCE === 'mock') { const m = await getMock(); return {mode: 'mock', flights: m.flights, clusters: m.clusters}; }
+    const [flights, clusters, h] = await Promise.all([j('/flights?limit=1000'), j('/clusters'), j('/health')]);
+    return {mode: h.data_mode, flights, clusters};
+  },
+  // /flights/{id}/profile is a PROPOSED endpoint (not in current API_SPEC). Returns [] if unavailable.
+  async profile(f) {
+    if (SOURCE === 'mock') return f.profile || [];
+    try { const r = await j('/flights/' + encodeURIComponent(f.flight_id) + '/profile'); return r.points || r; } catch (e) { return []; }
+  }
+};
+/* ===== STATE / HELPERS ===== */
+const COL = ['--c0','--c1','--c2','--c3','--c4'], col = c => `var(${COL[(c ?? 0) % 5]})`;
+const hex = c => getComputedStyle(document.documentElement).getPropertyValue(COL[(c ?? 0) % 5]).trim();
+const $ = id => document.getElementById(id), f1 = v => v == null ? '–' : (+v).toFixed(1);
+let S = {flights: [], clusters: [], sort: {k: 'flight_id', d: 1}, cl: '', an: false, sel: null};
+const COLS = [['flight_id','Flight'],['cluster','Cluster'],['mean_clearance','Mean clr (ft)'],['std_clearance','Std (ft)'],
+  ['min_clearance','Min clr (ft)'],['start_altitude','Start alt (ft)'],['anomaly_score','Anomaly score'],['is_anomaly','Anomaly']];
+const hasGeo = f => f.start_lat != null && f.start_lon != null;
+const view = () => S.flights.filter(f => (S.cl === '' || String(f.cluster) === S.cl) && (!S.an || f.is_anomaly))
+  .sort((a, b) => { const {k, d} = S.sort, x = a[k], y = b[k];
+    return x == null ? 1 : y == null ? -1 : (x > y ? 1 : x < y ? -1 : 0) * d; });
+/* ===== MAP (Leaflet) — markers only for flights that have coordinates ===== */
+const map = L.map('map').setView([37, -117], 7), layer = L.layerGroup().addTo(map), track = L.layerGroup().addTo(map);
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom: 18, attribution: '© OpenStreetMap'}).addTo(map);
+let markers = {};
+function drawMap(fit) {
+  layer.clearLayers(); markers = {}; const pts = [];
+  view().filter(hasGeo).forEach(f => {
+    const m = L.circleMarker([f.start_lat, f.start_lon], {radius: f.is_anomaly ? 9 : 6, color: f.is_anomaly ? getComputedStyle(document.documentElement).getPropertyValue('--hi').trim() : '#fff',
+      weight: f.is_anomaly ? 3 : 1, fillColor: hex(f.cluster), fillOpacity: .9}).addTo(layer);
+    m.bindTooltip(`${f.flight_id} · cluster ${f.cluster}${f.is_anomaly ? ' · anomaly' : ''}`);
+    m.on('click', () => select(f.flight_id)); markers[f.flight_id] = m; pts.push([f.start_lat, f.start_lon]);
+  });
+  if (fit && pts.length) map.fitBounds(pts, {padding: [20, 20]});
+}
+/* ===== TABLE ===== */
+function drawTable() {
+  $('th').innerHTML = '<tr>' + COLS.map(([k, l]) => `<th data-k="${k}" class="${S.sort.k === k ? 's' : ''}" data-d="${S.sort.d > 0 ? ' ▲' : ' ▼'}">${l}</th>`).join('') + '</tr>';
+  $('th').querySelectorAll('th').forEach(t => t.onclick = () => { const k = t.dataset.k;
+    S.sort = {k, d: S.sort.k === k ? -S.sort.d : 1}; refresh(); });
+  const v = view(); $('cnt').textContent = `${v.length} of ${S.flights.length} flights`;
+  $('tb').innerHTML = v.map(f => `<tr class="r ${f.is_anomaly ? 'a' : ''} ${S.sel === f.flight_id ? 'sel' : ''}" data-id="${f.flight_id}">
+    <td>${f.flight_id}</td><td style="color:${col(f.cluster)}">● ${f.cluster ?? '–'}</td><td>${f1(f.mean_clearance)}</td><td>${f1(f.std_clearance)}</td>
+    <td>${f1(f.min_clearance)}</td><td>${f1(f.start_altitude)}</td><td>${f1(f.anomaly_score)}</td><td>${f.is_anomaly ? '<span class="tag">anomaly</span>' : ''}</td></tr>`).join('');
+  $('tb').querySelectorAll('tr').forEach(r => r.onclick = () => select(r.dataset.id));
+}
+/* ===== CLUSTER PANEL ===== */
+function drawClusters() {
+  $('clusters').innerHTML = S.clusters.map(c => `<div class="cc ${String(c.cluster) === S.cl ? 'on' : ''}" style="--k:${col(c.cluster)}" data-c="${c.cluster}">
+    <b>Cluster ${c.cluster ?? 'unassigned'}</b><div>${c.flight_count} flights</div><div>mean anomaly score ${f1(c.mean_anomaly_score)}</div>
+    <div class="an">${c.anomaly_count} anomal${c.anomaly_count === 1 ? 'y' : 'ies'}</div></div>`).join('');
+  $('clusters').querySelectorAll('.cc').forEach(e => e.onclick = () => { S.cl = S.cl === e.dataset.c ? '' : e.dataset.c; $('fc').value = S.cl; refresh(true); });
+}
+/* ===== DETAIL VIEW: dependency-free SVG chart ===== */
+async function select(id) {
+  S.sel = id; const f = S.flights.find(x => x.flight_id === id); drawTable(); track.clearLayers();
+  $('detail').innerHTML = '<div class="empty">Loading profile…</div>';
+  const p = await Data.profile(f); if (S.sel !== id) return;
+  $('detail').innerHTML = `<dl><dt>Flight</dt><dd>${f.flight_id}</dd><dt>Cluster</dt><dd style="color:${col(f.cluster)}">● ${f.cluster ?? '–'}</dd>
+    <dt>Anomaly</dt><dd>${f.is_anomaly ? '<span class="tag">flagged</span>' : 'not flagged'} (score ${f1(f.anomaly_score)})</dd>
+    <dt>Mean / Min / Std</dt><dd>${f1(f.mean_clearance)} / ${f1(f.min_clearance)} / ${f1(f.std_clearance)} ft</dd></dl>` + chart(f, p);
+  if (p.length && p[0].lat != null) { const ll = p.map(q => [q.lat, q.lon]);
+    L.polyline(ll, {color: hex(f.cluster), weight: 3}).addTo(track); map.fitBounds(ll, {padding: [40, 40]}); }
+  else if (markers[id]) map.panTo(markers[id].getLatLng());
+}
+function chart(f, p) {
+  if (!p.length) return '<div class="empty">No per-observation profile provided by the data source for this flight.</div>';
+  const W = 460, H = 220, m = {l: 44, r: 8, t: 8, b: 22}, y = p.map(q => q.clearance_corrected_ft);
+  const hi = Math.max(...y, f.mean_clearance || 0), lo = Math.min(0, ...y), X = i => m.l + i / (p.length - 1 || 1) * (W - m.l - m.r),
+    Y = v => H - m.b - (v - lo) / (hi - lo || 1) * (H - m.t - m.b);
+  const ref = (v, t) => v == null ? '' : `<line x1="${m.l}" x2="${W - m.r}" y1="${Y(v)}" y2="${Y(v)}" stroke="currentColor" stroke-dasharray="4 3" opacity=".6"/><text x="${W - m.r}" y="${Y(v) - 3}" text-anchor="end">${t} ${f1(v)}</text>`;
+  const ticks = [lo, (lo + hi) / 2, hi].map(v => `<text x="${m.l - 4}" y="${Y(v) + 3}" text-anchor="end">${v.toFixed(0)}</text>`).join('');
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Clearance profile for ${f.flight_id}" style="color:var(--mu)">${ticks}
+    ${ref(f.mean_clearance, 'mean')}${ref(f.min_clearance, 'min')}<polyline fill="none" stroke="${hex(f.cluster)}" stroke-width="2" points="${p.map((q, i) => X(i) + ',' + Y(q.clearance_corrected_ft)).join(' ')}"/>
+    <text x="${m.l}" y="${H - 6}">observation # (1–${p.length})</text><text x="4" y="10">ft</text></svg>`;
+}
+/* ===== WIRING ===== */
+function refresh(fit) { drawClusters(); drawTable(); drawMap(fit); }
+$('fc').onchange = e => { S.cl = e.target.value; refresh(true); };
+$('fa').onchange = e => { S.an = e.target.checked; refresh(true); };
+Data.load().then(d => {
+  S.flights = d.flights; S.clusters = d.clusters; $('mode').textContent = d.mode === 'mock' ? 'MOCK DATA' : 'DATA MODE: ' + d.mode.toUpperCase();
+  $('fc').innerHTML += S.clusters.map(c => `<option>${c.cluster}</option>`).join(''); refresh(true);
+  if (!S.flights.some(hasGeo)) $('map').insertAdjacentHTML('afterend', '<div class="empty">No coordinates in this data source — no markers to draw.</div>');
+}).catch(e => { $('mode').textContent = 'LOAD FAILED'; $('detail').innerHTML = `<div class="empty">${e.message}. Mock mode needs a local web server (see README).</div>`; });
+</script></body></html>
